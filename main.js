@@ -1,4 +1,50 @@
 (function () {
+
+	let createRepTable = function (weight) {
+		// category, weight, per side, change
+		// cats: 60, 80, 90, Working
+		let a60 = rnd5(.6 * weight);
+		let a80 = rnd5(.8 * weight);
+		let a90 = rnd5(.9 * weight);
+		let table = [
+			["Percentage", "Weight", "Per Side", "Increase"],
+			["60%", a60, (a60 - 45) / 2, a60 - 45],
+			["80%", a80, (a80 - 45) / 2, a80 - a60],
+			["90%", a90, (a90 - 45) / 2, a90 - a80],
+			["100%", weight, (weight - 45) / 2, weight - a90]
+		];
+
+		return table;
+	};
+
+	let createBootTable = function (arr) {
+		let retObj = {};
+		let randomID = randStr();
+		let htmlString = "";
+		htmlString += '<table class="table table-sm">';
+		arr.forEach(function (row, j) {
+			let td = "td";
+			if (j === 0) {
+				htmlString += "<thead>";
+				td = "th";
+			} else if (j === 1) {
+				htmlString += "<tbody>"
+			}
+			row.forEach(function (entry, i) {
+				htmlString += "<" + td + ">";
+				htmlString += entry;
+				htmlString += "</" + td + ">";
+			});
+			htmlString += "</tr>"
+			if (j === 0) {
+				htmlString += "</thead>"
+			}
+		});
+		htmlString += "</tbody></table>"
+
+		return htmlString;
+	}
+
     let calculateReps = function (weight, repin, repout) {
       let pers = [
         100,
@@ -28,7 +74,20 @@
     };
 
     let rnd5 = function (num) {
-      return Math.round(num / 5) * 5;
+    	let rnd1 = Math.round(num / 5) * 5;
+    	let rnd2 = Math.round((num + 2.5) / 5) * 5;
+    	let rnd3 = Math.round((num - 2.5) / 5) * 5;
+    	let ret = rnd1
+
+    	if (rnd1 / 10 === Math.round(rnd1/10)) {
+    		ret = rnd2;
+    	}
+
+    	if (rnd2 / 10 === Math.round(rnd2/10)) {
+    		ret = rnd3;
+    	}
+
+      return ret;
     };
 
     let onGet = function (data) {
@@ -50,12 +109,8 @@
       google.charts.setOnLoadCallback(buildFigure(data, "Power Clean"));
     };
 
-    let buildTable = function (tableInfo, identifier) {
-      return function () {
-        let tableDate = google.visualization.arrayToDataTable(tableInfo);
-        let table = new google.visualization.Table(document.getElementById(identifier));
-        table.draw(tableDate, {showRowNumber: false});
-      }
+    let randStr = function () {
+    	return Math.random().toString().replace(/\0\./, "");
     };
 
     let buildFigure = function (dataObj, identifier) {
@@ -75,11 +130,14 @@
 
       div.innerHTML += 
         "<h2>" + identifier + "</h2>" +
-        '<div class="col-sm-12 col-md-6" id="' + divName + '"></div>' +
-        '<div style="margin-top: 20px;margin-bottom: 20px" class="col-sm-12 col-md-6">' +
-        '<p id="' + divName + '_info"></p>' +
+        '<div class="col-md-12 col-lg-6" id="' + divName + '"></div>' +
+        '<div class="col-md-12 col-lg-6">' +
         '<p id="' + divName + '_nextTable"></p>' +
-        "</div>";
+        '<p id="' + divName + '_info"></p>' +
+        '<p id="' + divName + '_workoutAmt"></p>' +
+        '<p id="' + divName + '_workout"></p>' +
+        "</div>" +
+        "<hr />";
 
       return function () {
 
@@ -133,7 +191,9 @@
         let goal = calculateReps(goals[0]["weight (1RM)"], 1, reps);
 
         let infoDiv = document.getElementById(divName + '_info');
-        let tableDiv = divName + '_nextTable';
+        let tableDiv = document.getElementById(divName + '_nextTable');
+        let workoutForm = document.getElementById(divName + '_workoutAmt');
+        let workoutDiv = document.getElementById(divName + '_workout');
 
         // display goals and last
         infoDiv.innerHTML = 
@@ -166,14 +226,30 @@
             rndHalf(equalWork + goal * 0.045)
           ]
         ];
-        google.charts.setOnLoadCallback(buildTable(nextTable, tableDiv)); 
-        console.log(nextTable);        
+
+        tableDiv.innerHTML = createBootTable(nextTable);
+        console.log(nextTable);
+
+        // build next weight area
+        let weightid = "weight" + randStr();
+        workoutForm.innerHTML = 
+        	'<div class="mb-3">' +
+			'<label for="' + weightid + '" class="form-label"><b>Work Set Weight</b></label>' + 
+			'<input class="form-control" id="' + weightid + '" placeholder=" '+ equalReps +'">' +
+			'</div>'
+
+		let weightEntry = document.getElementById(weightid);
+		weightEntry.onchange = function (xx) {
+			workoutDiv.innerHTML = createBootTable(createRepTable(xx.target.value));
+		};
+
+		workoutDiv.innerHTML = createBootTable(createRepTable(equalReps));
 
         let visData = google.visualization.arrayToDataTable(figData);
 
         let options = {
           width: "100%",
-          height: 370,
+          height: 500,
           pointSize: 8,
           legend: {
             position: "top"
@@ -206,6 +282,6 @@
     };
 
     //actually get things started
-    google.charts.load('current', {'packages':['table']});
+    google.charts.load('51', {'packages':['table']});
     getData();
 }())
