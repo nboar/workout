@@ -1,5 +1,17 @@
 (function () {
 
+	if ('wakeLock' in navigator) {
+	  // Screen Wake Lock API supported
+	  // Create a reference for the Wake Lock.
+
+		// create an async function to request a wake lock
+		navigator.wakeLock.request('screen').then(function () {
+			console.log('not sleeping...');
+		}).catch(function (err) {
+			console.error(err);
+		});
+	}
+
 	let createRepTable = function (weight) {
 		// category, weight, per side, change
 		// cats: 60, 80, 90, Working
@@ -134,12 +146,18 @@
         '<div class="col-md-12 col-lg-6">' +
         '<p id="' + divName + '_nextTable"></p>' +
         '<p id="' + divName + '_info"></p>' +
+        '<p id="' + divName + '_goalProject"></p>' +
         '<p id="' + divName + '_workoutAmt"></p>' +
         '<p id="' + divName + '_workout"></p>' +
         "</div>" +
         "<hr />";
 
       return function () {
+      	let infoDiv = document.getElementById(divName + '_info');
+        let tableDiv = document.getElementById(divName + '_nextTable');
+        let workoutForm = document.getElementById(divName + '_workoutAmt');
+        let workoutDiv = document.getElementById(divName + '_workout');
+        let goalProject = document.getElementById(divName + '_goalProject');
 
         //Movement	Weight	Date	Difficulty
         // movement	weight	date	difficulty	sets	repetitions
@@ -183,26 +201,38 @@
 
 
         // set up information table
-        let last = summaryData.sort((a, b) => a.date - b.date).pop();
-        console.log("last", last);
+        let last = summaryData.sort((a, b) => b.date - a.date)[0];
+        // console.log("last", last);
 
         let reps = program[0].repetitions;
         let sets = program[0].sets;
-        let goal = calculateReps(goals[0]["weight (1RM)"], 1, reps);
+        let thisGoal = goals[0];
+        let goalIndex = 0;
+        
 
-        let infoDiv = document.getElementById(divName + '_info');
-        let tableDiv = document.getElementById(divName + '_nextTable');
-        let workoutForm = document.getElementById(divName + '_workoutAmt');
-        let workoutDiv = document.getElementById(divName + '_workout');
+
+        while (last.oneRM >= thisGoal["weight (1RM)"] && goalIndex < goals.length - 1) {
+        	goalIndex += 1;
+        	thisGoal = goals[goalIndex];
+        }
+        goal = calculateReps(thisGoal["weight (1RM)"], 1, reps);
 
         // display goals and last
         infoDiv.innerHTML = 
-          "<b>Goal (" + goals[0].date.toLocaleDateString("en-US") + "):</b> " + 
+          "<p><b>Last:</b> " + last.counts.sort((a, b) => b[0] - a[0]).map(a => a[0] + " lbs x " + a[1] + " reps").join(', ') +
+          " (1RM: " +  last.oneRM + " lbs)" +
+          "</p>" +
+          "<p><b>Goal (" + thisGoal.date.toLocaleDateString("en-US") + "):</b> " + 
           goal + " lbs " + reps + "RM" +
-          " (" + goals[0]["weight (1RM)"] + " lbs 1RM)" +
-          "<br />" +
-          "<b>Last:</b> " + last.counts.map(a => a[0] + " lbs x " + a[1] + " reps").join(', ') +
-          " (1RM: " +  last.oneRM + " lbs)";
+          " (" + thisGoal["weight (1RM)"] + " lbs 1RM)</p>";
+
+        // work on goal projection
+        //goalProject
+        let toGoal = (thisGoal["weight (1RM)"] - last.oneRM) /  thisGoal["weight (1RM)"];
+        let workOutsToTotal = Math.floor((thisGoal.date - last.date) / 1000 / 60 / 60 / 24 / program[0].cycleLength);
+        console.log(toGoal, workOutsToTotal);
+
+        goalProject.innerHTML = Math.ceil(toGoal / workOutsToTotal * 1000) / 10 + "% increase needed in each of " + workOutsToTotal + " sessions to reach goal.";
 
 
         //create table for next lift
@@ -235,12 +265,12 @@
         workoutForm.innerHTML = 
         	'<div class="mb-3">' +
 			'<label for="' + weightid + '" class="form-label"><b>Work Set Weight</b></label>' + 
-			'<input class="form-control" id="' + weightid + '" placeholder=" '+ equalReps +'">' +
+			'<input class="form-control" id="' + weightid + '" value=" '+ equalReps +'">' +
 			'</div>'
 
 		let weightEntry = document.getElementById(weightid);
-		weightEntry.onchange = function (xx) {
-			workoutDiv.innerHTML = createBootTable(createRepTable(xx.target.value));
+		weightEntry.onchange = function (evt) {
+			workoutDiv.innerHTML = createBootTable(createRepTable(evt.target.value));
 		};
 
 		workoutDiv.innerHTML = createBootTable(createRepTable(equalReps));
