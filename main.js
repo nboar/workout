@@ -1,8 +1,5 @@
 (function () {
 
-	// const deploymentURL = "https://script.google.com/macros/s/AKfycbwiEXyo97HTvSeBLKaORmf2rW6wVCBLihXBo0yI5okvn4XW7dP3xhF-m6lvcaH4yBI/exec";
-	// const deploymentURL = "https://script.google.com/macros/s/AKfycbzaeuzG1kcvexAaXrdX_dbPdAkvCZCOSx2Ugt4V2kE/dev";
-
 	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
 
 	//testing deployment
@@ -232,15 +229,20 @@
 
     			//assign movement, reps, and weight per uid
     			let formEntries = {};
+    			let formKeys = [];
     			formList.forEach(function (input) {
     				let name = input.name.split('_');
-    				formEntries[name[1]] = formEntries[name[1]] || {};
-    				formEntries[name[1]].movement = name[0];
+    				if (!formEntries.hasOwnProperty(name[1])) {
+    					formEntries[name[1]] = {
+    						movement: name[0]
+    					};
+    					formKeys.push(name[1]);
+    				}
     				formEntries[name[1]][name[2]] = input.value;
     			});
 
     			// transform into a table
-    			let submitTable = Object.keys(formEntries).map(function (key) {
+    			let submitTable = formKeys.map(function (key) {
     				//format in table is: movement;weight;date;difficulty;sets;repetitions
     				return [
     					formEntries[key].movement,
