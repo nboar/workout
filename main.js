@@ -1,18 +1,40 @@
 (function () {
 
-    let createRepTable = function (weight) {
+	// const deploymentURL = "https://script.google.com/macros/s/AKfycbwiEXyo97HTvSeBLKaORmf2rW6wVCBLihXBo0yI5okvn4XW7dP3xhF-m6lvcaH4yBI/exec";
+	// const deploymentURL = "https://script.google.com/macros/s/AKfycbzaeuzG1kcvexAaXrdX_dbPdAkvCZCOSx2Ugt4V2kE/dev";
+
+	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
+
+	//testing deployment
+	// const deploymentURL = "https://script.google.com/macros/s/AKfycbwDHluNAVlFt2AaCTJDWqlxkHflm9lCs8T2bLz8Hu_duz4BudawP0n7DPNWOoXmCHTX/exec";
+
+	//production deployment
+	const deploymentURL = "https://script.google.com/macros/s/AKfycbwiEXyo97HTvSeBLKaORmf2rW6wVCBLihXBo0yI5okvn4XW7dP3xhF-m6lvcaH4yBI/exec";
+
+    let createRepTable = function (weight, lift, sets, reps) {
         // category, weight, per side, change
         // cats: 60, 80, 90, Working
         let a60 = rnd5(.6 * weight);
         let a80 = rnd5(.8 * weight);
         let a90 = rnd5(.9 * weight);
         let table = [
-            ["Percentage", "Weight", "Per Side", "Increase"],
-            ["60%", a60, (a60 - 45) / 2, a60 - 45],
-            ["80%", a80, (a80 - 45) / 2, a80 - a60],
-            ["90%", a90, (a90 - 45) / 2, a90 - a80],
-            ["100%", weight, (weight - 45) / 2, weight - a90]
+            ["Percentage", "Reps", "Weight", "Per Side", "Increase"],
+            ["60%", reps, a60, (a60 - 45) / 2, a60 - 45],
+            ["80%", Math.round(reps / 2), a80, (a80 - 45) / 2, a80 - a60],
+            ["90%", Math.round(reps / 3), a90, (a90 - 45) / 2, a90 - a80],
         ];
+
+        for (let i = 0; i < sets; i += 1) {
+        	let randID = lift + "_" + randStr();
+        	let htmlB = '<div class="input-group-sm"><input name="';
+        	let htmlM = '" class="form-control" value=';
+        	let htmlE = "></div>"
+        	let repsHTML = htmlB + randID + "_reps" + htmlM + reps + htmlE;
+        	let weightHTML = htmlB + randID + "_weight" + htmlM + weight + htmlE;
+        	table.push(["Work Set " + (i + 1), repsHTML, weightHTML, (weight - 45) / 2, weight - a90]);
+        }
+
+        console.log(table);
 
         return table;
     };
@@ -62,7 +84,7 @@
     };
 
     let getData = function () {
-        fetch("https://script.google.com/macros/s/AKfycbx6wZIXE6en7q_3dqf8aJaiBZBTZnElsvZKGy4tfpjkx4ref-hXw1Po93u7P5aotrxg/exec").then(function (response) {
+        fetch(deploymentURL).then(function (response) {
             return response.json();
         }).then(function (data) {
             onGet(data);
@@ -122,25 +144,153 @@
         });
 
         let $div = $('#main');
+        let $workout = $('#workout');
         let btndiv = $("<div>", {class: "btn-group"});
+        let state = "";
 
         //dashboard view
         makeButton("Dasboard", function () {
-        	$div.empty();
-        	Object.keys(liftsObj)
-        		.forEach(lift => buildDashboardElement(data, lift));
+        	$div.show();
+        	$workout.hide();
+        	if (state !== "Dashboard") {
+        		$div.empty();	
+        		state = "Dasboard";
+        		Object.keys(liftsObj)
+	        		.forEach(lift => buildDashboardElement(data, lift));
+        	}
         }).appendTo(btndiv);
 
         // workout views
         Object.keys(programObj).forEach(function (day) {
         	makeButton('Day ' + day, function () {
-        		$div.empty();
-        		data.program
-        			.filter(a => a.day === day)
-        			.forEach(lift => buildDashboardElement(data, lift.movement));
+        		$div.show();
+	        	$workout.hide();
+
+        		if (state !== 'Day ' + day) {
+	        		$div.empty();	
+	        		state = 'Day ' + day;
+	        		let thisProgram = data.program.filter(a => a.day === day)
+	        		thisProgram.forEach(lift => buildDashboardElement(data, lift.movement));
+	        		addWorkoutButton(data, thisProgram);
+	        	}
         	}).appendTo(btndiv);
+
         });
         btndiv.appendTo($("#navigation"));
+    };
+
+    let addWorkoutButton = function (data, program) {
+    	let $main = $('#main');
+    	let $workout = $('#workout');
+
+    	//setting this up so multiple submits cannot happen
+    	let posted = false;
+    	let postData = function (data) {
+			post(data).catch(function (err) {
+				console.error(err);
+				$submitBtn.removeClass("btn-primary");
+				$submitBtn.addClass("btn-danger");
+				$submitBtn.text("Failed, try again...");
+				posted = false;
+			}).then(function (res) {
+				$('main').children().empty();
+				$('#workout')
+					.show()
+					.html('<div class="jumbotron jumbotron-fluid"><div class="container"><h2 class="display-4">Success!</h2><p class="lead">Submitted, loading data, once done, select a button above to continue.</p></div></div>');
+				getData();
+			});
+		};
+
+    	let $submitBtn = $('<button>', {
+			text: "Submit Workout",
+			class: "btn btn-primary",
+			style: 'margin-bottom: 20px; margin-top: 20px'
+		});
+
+    	$('<button>', {
+    		text: "Start Workout",
+    		class: 'btn btn-success',
+    		style: 'margin-bottom: 20px'
+    	}).click(function () {
+    		let moves = [];
+    		let inputs = $main.find("input");
+    		$workout.empty();
+    		$main.hide();
+    		$workout.show();
+
+    		inputs.each(function (ind) {
+    			buildWorkout({
+    				name: inputs[ind].name,
+    				weight: inputs[ind].value,
+    				program: program.filter(a => a.movement === inputs[ind].name)[0]
+    			}, $workout);
+    		});
+
+    		$submitBtn.click(function (evt) {
+    			evt.preventDefault();
+    			let formList = $workout.serializeArray();
+
+    			//assign movement, reps, and weight per uid
+    			let formEntries = {};
+    			formList.forEach(function (input) {
+    				let name = input.name.split('_');
+    				formEntries[name[1]] = formEntries[name[1]] || {};
+    				formEntries[name[1]].movement = name[0];
+    				formEntries[name[1]][name[2]] = input.value;
+    			});
+
+    			// transform into a table
+    			let submitTable = Object.keys(formEntries).map(function (key) {
+    				//format in table is: movement;weight;date;difficulty;sets;repetitions
+    				return [
+    					formEntries[key].movement,
+    					formEntries[key].weight,
+    					(new Date()).toLocaleDateString(),
+    					0, // difficulty
+    					1, // sets
+    					formEntries[key].reps
+    				];
+    			});
+    			
+    			//actually post the data
+    			if (!posted) {
+    				postData(submitTable);
+    				posted = true;
+    			}
+
+    		}).appendTo($workout);
+
+    	}).appendTo($main);
+    };
+
+    let buildWorkout = function (move, $div) {
+    	$("<h2>", {text: move.name}).appendTo($div);
+    	$("<p>", {
+    		text: move.weight + " lbs for " + move.program.sets + " sets of " + move.program.repetitions + " repetitions."
+    	}).appendTo($div);
+
+    	//Add the framework for the worktable
+    	let $tableDiv = $("<div>").appendTo($div);
+    	let $workTable = $(createBootTable(createRepTable(move.weight, move.name, move.program.sets, move.program.repetitions)));
+    	$workTable.appendTo($tableDiv)
+
+    	// Add the "add a row button"
+    	$('<button>', {
+    		type: "button",
+    		class: "btn btn-outline-info",
+    		text: "Add Row"
+    	}).click(function (evt) {
+    		evt.preventDefault();
+    		console.log('adding to');
+			let $body = $workTable.children('tbody');
+			let html = $body.children(":last")[0].outerHTML;
+			let number = html.match(/Work Set (\d+)/)[1] * 1 + 1;
+			html = html.replace(/Work Set (\d+)/, "Work Set " + number);
+			html = html.replace(/_\d+_/g, "_" + randStr() + "_");
+			$(html).appendTo($body);
+    	})
+    	.appendTo($div);
+
     };
 
     let randStr = function () {
@@ -149,6 +299,11 @@
     };
 
     let addComponents = function ($div, identifier, divName) {
+    	// add header
+    	$('<h2>', {
+    		text: identifier
+    	}).appendTo($div);
+
     	// add figure column
     	$('<div>', {
     		class: "col-md-12 col-lg-6",
@@ -309,20 +464,11 @@
 
         // build next weight area
         let weightid = "weight" + randStr();
-        let weightChange = function (evt) {
-        	console.log('changed?')
-        	let weight = equalReps;
 
-        	if (evt) {
-        		evt.preventDefault();
-        		weight = evt.target.value;
-        	}
-        	page.workout.html(createBootTable(createRepTable(weight)));
-        };
-
-        //add the elements
+        // add the elements
         $workoutWeight = $('<input>', {
         	class: "form-control",
+        	name: identifier,
         	id: weightid,
         	value: equalReps
         });
@@ -334,12 +480,6 @@
         	}))
         	.append($workoutWeight)
         	.appendTo(page.workoutAmt);
-
-        // set the change function
-        $workoutWeight.change(weightChange);
-
-        //call the setup function
-        weightChange();
     }
 
     let buildFigure = function (summaryData, divName) {
@@ -401,6 +541,30 @@
 
         google.charts.setOnLoadCallback(buildIt);
     };
+
+    let post = function (data) {
+    	let postObj = {
+    		data: data,
+    		key: posterKey
+    	};
+
+		return fetch(deploymentURL, { 
+			method: "POST",
+	  		body: JSON.stringify(postObj) 
+	  	}).then((response) => {
+	  		console.log(response.status);
+	  		if (response.status !== 200) {
+	  			throw "Did not work";
+	  		}
+			return response.json();
+	    }).then((res) => {
+	    	console.log(res);
+	    	if (res && res.success) {
+	    		return res;
+	    	}
+	    	throw "Did not work";
+	    });
+	}
 
     //actually get things started
     google.charts.load('51', {
