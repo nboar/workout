@@ -1,12 +1,502 @@
 (function () {
 
 	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
+	const startDate = new Date("11/1/2021");
+	const oneRMKey = "weight (1RM)";
+	const ONE_DAY =   1000 * 60 * 60 * 24;
+	const pers = [ // weight ratio to 1RM 
+        100, // 1RM
+        94, // 2RM
+        91, // 3RM
+        88, // 4RM
+        86, // 5RM
+        83, // 6RM
+        82, // 7RM
+        78, // 8RM
+        77, // 9RM
+        73 // 10RM
+    ];
 
 	//testing deployment
 	// const deploymentURL = "https://script.google.com/macros/s/AKfycbwDHluNAVlFt2AaCTJDWqlxkHflm9lCs8T2bLz8Hu_duz4BudawP0n7DPNWOoXmCHTX/exec";
 
 	//production deployment
 	const deploymentURL = "https://script.google.com/macros/s/AKfycbwiEXyo97HTvSeBLKaORmf2rW6wVCBLihXBo0yI5okvn4XW7dP3xhF-m6lvcaH4yBI/exec";
+
+	///////////////////////////////////////
+	// general purpose functions
+	///////////////////////////////////////
+	const clone = (function () {
+		// taken from https://javascript.plainenglish.io/write-a-better-deep-clone-function-in-javascript-d0e798e5f550
+
+		function cloneOtherType(target) {
+		    const constrFun = target.constructor;
+		    switch (toRawType(target)) {
+		        case "Boolean":
+		        case "Number":
+		        case "String":
+		        case "Error":
+		        case "Date":
+		            return new constrFun(target);
+		        case "RegExp":
+		            return cloneReg(target);
+		        case "Symbol":
+		            return cloneSymbol(target);
+		        case "Function":
+		            return target;
+		        default:
+		            return null;
+		    }
+		}
+
+		function toRawType (value) {
+		  let _toString = Object.prototype.toString;
+		  let str = _toString.call(value)
+		  return str.slice(8, -1)
+		}
+
+		function cloneSymbol(targe) {
+			//extra line for collapse
+		    return Object(Symbol.prototype.valueOf.call(targe));
+		}
+
+		function cloneReg(targe) {
+		    const reFlags = /\w*$/;
+		    const result = new targe.constructor(targe.source, reFlags.exec(targe));
+		    result.lastIndex = targe.lastIndex;
+		    return result;
+		}
+
+		function forEach(array, iteratee) {
+		    let index = -1;
+		    const length = array.length;
+		    while (++index < length) {
+		        iteratee(array[index], index);
+		    }
+		    return array;
+		}
+
+		// core function
+		return function (target, map = new WeakMap()) {
+
+		    // clone primitive types
+		    if (typeof target != "object" || target == null) {
+		        return target;
+		    }
+
+		    const type = toRawType(target);
+		    let cloneTarget = null;
+
+		    if (map.get(target)) {
+		        return map.get(target);
+		    }
+		    map.set(target, cloneTarget);
+
+		    if (type != "Set" && type != "Map" && type != "Array" && type != "Object") {
+		        return cloneOtherType(target)
+		    }
+
+		    // clone Set
+		    if (type == "Set") {
+		        cloneTarget = new Set();
+		        target.forEach(value => {
+		            cloneTarget.add(clone(value, map));
+		        });
+		        return cloneTarget;
+		    }
+
+		    // clone Map
+		    if (type == "Map") {
+		        cloneTarget = new Map();
+		        target.forEach((value, key) => {
+		            cloneTarget.set(key, clone(value, map));
+		        });
+		        return cloneTarget;
+		    }
+
+		    // clone Array
+		    if (type == "Array") {
+		        cloneTarget = new Array();
+		        forEach(target, (value, index) => {
+		          cloneTarget[index] = clone(value, map);
+		        })
+		    }
+
+		    // clone normal Object
+		    if (type == "Object") {
+		        cloneTarget = new Object();
+		        forEach(Object.keys(target), (key, index) => {
+		          cloneTarget[key] = clone(target[key], map);
+		        })
+		    }
+
+		    return cloneTarget;
+		}
+	}());
+	const randStr = function () {
+    	// builds random string for ID.
+        return Math.random().toString().replace(/0\./, "");
+    };
+
+	///////////////////////////////////////
+	// specific calculation functions
+	///////////////////////////////////////
+	const calculateReps = function (weight, repin, repout) {
+		// simple calculation based on pers table above
+        return Math.round(weight / pers[repin - 1] * pers[repout - 1] * 2) / 2;
+    };
+	const rndHalf = function (num) {
+    	// rounds to nearest 0.5lbs
+        return Math.round(num * 2) / 2;
+    };
+    const rnd5 = function (num) {
+    	// rounds to only 5's 15, 25, etc
+        let rnd1 = Math.round(num / 5) * 5;
+        let rnd2 = Math.round((num + 2.5) / 5) * 5;
+        let rnd3 = Math.round((num - 2.5) / 5) * 5;
+        let ret = rnd1
+
+        if (rnd1 / 10 === Math.round(rnd1 / 10)) {
+            ret = rnd2;
+        }
+
+        if (rnd2 / 10 === Math.round(rnd2 / 10)) {
+            ret = rnd3;
+        }
+
+        return ret;
+    };
+
+    ///////////////////////////////////////
+	// scope in the buildDataObject functions
+	///////////////////////////////////////
+	const buildDataObject = (function () {
+
+		const findProgramDays = function (dataArr) {
+	    	let outObj = {};
+	    	dataArr.forEach(function (lift) {
+	    		if (lift.wkday) {
+	    			outObj[lift.wkday] = outObj[lift.wkday] || {};
+	    			outObj[lift.wkday][lift.date] = outObj[lift.wkday][lift.date] || [];
+	    			outObj[lift.wkday][lift.date].push(lift);
+	    		} else {
+	    			outObj["none"] = outObj["none"] || {};
+	    			outObj["none"][lift.date] = outObj["none"][lift.date] || [];
+	    			outObj["none"][lift.date].push(lift);
+	    		}
+	    	});
+	    	Object.keys(outObj)
+	    		.forEach(function (day) {
+	    			outObj[day] = Object.keys(outObj[day])
+	    				.map(function (date) {
+	    					let ret = {
+	    						date: new Date(date),
+		    					lifts: outObj[day][date]
+	    					};
+	    					if (day !== "none") {
+	    						ret.day = day;
+	    					}
+	    					return ret;
+	    				})
+	    				.sort((a, b) => b.date - a.date);
+	    		});
+	    	return outObj;
+	    };
+
+		const flushOutPrograms = function (data) {
+			// define color list
+			let colorList = [
+	    		"#6610f2",
+	    		"#fd7e14",
+	    		"#198754",
+	    		"#0dcaf0",
+	    		"#d63384",
+	    		"#ffc107",
+	    		"#dc3545"
+	    	];
+			
+		    // flush out day information
+	        let programObj = {};
+	        data.program = data.program.map(function (lift) {
+	        	let last = data.lifts
+	    			.filter(a => a.day === lift.day)
+	    			.sort((a, b) => b.date - a.date)[0].date;
+	        	programObj[lift.day] = programObj[lift.day] || {
+	        		color: colorList.shift(),
+	        		day: lift.day,
+	        		last: last,
+	        		cycleLength: lift.cycleLength,
+	        		movements: []
+	        	};
+	        	programObj[lift.day].movements.push(lift);
+	        	lift.color = programObj[lift.day].color;
+	        	lift.last = last;
+	        	return lift;
+	        });
+
+	        return programObj;
+		};
+
+		const summarizedByDate = function (dateObj) {
+			// summarized each lift/date combination
+			let retArr = [];
+			let dateStrs = Object.keys(dateObj);
+
+			return dateStrs.map(function (date) {
+				let oneRepMax = 0;
+	            let maxAttempt = 0;
+	            let totalWork = 0;
+	            let totalByWeight = {};
+	            let difficulty;
+	            let day;
+	            dateObj[date].forEach(function (lift) {
+	            	// determine oneRepMax
+	            	let thisRep = calculateReps(lift.weight, lift.repetitions, 1);
+	                oneRepMax = Math.max(oneRepMax, thisRep);
+
+	                // grab max lift completed
+	                maxAttempt = Math.max(maxAttempt, lift.weight);
+
+	                //calculate total work
+	                totalWork += lift.weight * lift.repetitions * lift.sets;
+
+	                //assign 'difficulty'
+	                difficulty = lift.difficulty;
+
+	                //assign 'day'
+	                day = lift.day
+	            });
+	            return {
+	                date: new Date(date),
+	                difficulty: difficulty,
+	                work: totalWork,
+	                oneRM: oneRepMax,
+	                maxRep: maxAttempt,
+	                lifts: dateObj[date],
+	                day: day
+	            };
+			}).sort((a, b) => b.date - a.date); // order by new first
+		};
+
+		const getMovementInformation = function (data) {
+			// Pull the data together by movement
+			let movementObj = {};
+
+			//start the process with lift days
+			data.lifts.forEach(function (lift) {
+				let liftDate = lift.date.toLocaleDateString();
+
+				//define object
+				movementObj[lift.movement] = movementObj[lift.movement] || {
+					movement: lift.movement,
+					goals: data.goals.filter(a => a.movement === lift.movement),
+					days: data.program.filter(a => a.movement === lift.movement),
+					lifts: [],
+					liftsByDate: {}
+				};
+
+				//add lift
+				movementObj[lift.movement].lifts.push(lift);
+
+				//add lift by date
+				movementObj[lift.movement].liftsByDate[liftDate] = movementObj[lift.movement].liftsByDate[liftDate] || [];
+				movementObj[lift.movement].liftsByDate[liftDate].push(lift); 
+			});
+
+			// clean up lifts by date and add summary data
+			Object.keys(movementObj)
+				.forEach(function (move) {
+					movementObj[move].liftsByDate = summarizedByDate(movementObj[move].liftsByDate);
+				});
+
+			return movementObj;
+		};
+
+		const getFilters = function (getObj, days, movements) {
+			let daysRet = days, movementsRet = movements;
+
+			// grab all days of interest
+			if (getObj.day) {
+				daysRet = getObj.day.split(';').map(a => a.trim());
+			}
+
+			//grab all movements of interest
+			if (getObj.movement) {
+				movementsRet = getObj.movement.split(';').map(a => a.trim());
+			}
+
+			return {
+				days: daysRet,
+				movements: movementsRet
+			};
+		};
+
+		const calculateGoalProgress = function (movement) {
+			// movement.days will be attached with goal progress
+
+			movement.days.forEach(function (dayObj) {
+				let progObj = {
+					oneRM: 0,
+					completeWorkoutWeight: 0
+				};
+				movement.liftsByDate.forEach(function (date) {
+					// One Rep Max
+					progObj.oneRM = Math.max(
+						progObj.oneRM,
+						date.oneRM
+					);
+
+					// Completed workout
+					let completeSetCount = 0;
+					let weightsLifted = [];
+					date.lifts.forEach(function (lift) {
+						if (lift.repetitions >= dayObj.repetitions) {
+							for (let i = 0; i < lift.sets; i += 1) {
+								weightsLifted.push(lift.weight);
+							}
+						}
+					});
+
+					if (weightsLifted.length >= dayObj.sets) {
+						//sort weights lifted
+						weightsLifted.sort((a, b) => b - a);
+
+						//grab worst set that hit reps and counted
+						progObj.completeWorkoutWeight = Math.max(
+							weightsLifted[dayObj.sets - 1],
+							progObj.completeWorkoutWeight
+						);
+					}
+				});
+
+				//Assign object
+				dayObj.progress = progObj;
+			});
+		};
+
+		// buildDataObject function
+		return function (data) {
+			//terminology: 
+				// lift: actual lift session
+				// movement: description of the lift ie back squat
+				// day: day of workout, as in day A, B, C, D
+				// date: calendar date of workout
+
+			let retObj = {};
+
+			retObj.get = {};
+
+			retObj.get.movement = function (getObj) {
+				// filter options: Workout day, Movement
+				getObj = getObj || {};
+				
+				let filterObj = getFilters(getObj, days, movements);
+
+				let retArr = [];
+
+				filterObj.movements.forEach(function (move) {
+					let daysForMove = movementObj[move].days;
+					let matched = false;
+					let index = 0;
+					if (daysForMove.length === 0) {
+						matched = true; // allow retired lifts to show up
+					}
+					while (!matched && index < daysForMove.length) {
+						let searchRes = filterObj.days.filter(a => daysForMove[index].day);
+						if (searchRes.length > 0) {
+							matched = true;
+						}
+					}
+
+					if (matched) {
+						retArr.push(clone(movementObj[move]));
+					}
+				});
+
+				return retArr;
+			};
+
+			retObj.get.days = function (getObj) {
+				// filter options: Workout day, Movement
+				getObj = getObj || {};
+				
+				let filterObj = getFilters(getObj, days, movements);
+
+				let retArr = [];
+
+				filterObj.days.forEach(function (day) {
+					let moveArr = daysObj[day].movements
+						.filter(move => filterObj.movements.includes(move.movement));
+
+					if (moveArr.length) {
+						let addObj = clone(daysObj[day]);
+						moveArr = clone(moveArr).map(function (move) {
+							move.movementObj = retObj.get.movement({day: day, movement: move.movement})[0];
+							//move.movementObj.days = move.movementObj.days.filter(dayObj => dayObj.day === day);
+							return move;
+						})
+						addObj.movements = moveArr;
+						retArr.push(addObj);
+					}
+				});
+
+				return retArr;
+			};
+
+			retObj.get.dates = function (getObj) {
+				let dates = {};
+				data.lifts.forEach(function (lift) {
+					let dtString = lift.date.toLocaleDateString("en-us");
+					dates[dtString] = dates[dtString] || {
+						date: lift.date,
+						day: daysObj[lift.day],
+						lifts: []
+					}
+					dates[dtString].lifts.push(lift);
+				});
+				return clone(Object.keys(dates).map(d => dates[d]));
+			};
+
+	    	// filter my lifts for recent data 
+	    	// make date objects
+	    	// add 1RM calculation
+	    	data.lifts = data.lifts.map(function (row) {
+	            row.date = new Date(row.date);
+	            row.oneRM = calculateReps(row.weight, row.repetitions, 1);
+	            return row;
+	        }).filter(row => row.date > startDate);
+
+	        //turn goal dates into date objects
+	        data.goals = data.goals.map(function (row) {
+	        	row.date = new Date(row.date);
+	        	return row;
+	        });
+
+	    	// flush out program obj and rewrite data.program to include colors
+	        let daysObj = flushOutPrograms(data);
+	        let days = Object.keys(daysObj);
+
+	        // flush out movement information
+	        let movementObj = getMovementInformation(data);
+	        let movements = Object.keys(movementObj);
+
+	        // finally determine goal progress on the movementObj
+	        movements.forEach(move => calculateGoalProgress(movementObj[move]));
+
+	        console.log(data, daysObj, movementObj);
+
+	        return retObj;
+
+	        //pull out by workout day (when avaliable)
+	        // let programDays = findProgramDays(data.lifts);
+
+	        // add in day information to workout days
+	        // Object.keys(programDays).forEach(function (day) {
+	        // 	programDays[day].day = programObj[day];
+	        // });
+	        // console.log(programDays);
+		};
+	}());
 
     let createRepTable = function (weight, lift, sets, reps) {
         // category, weight, per side, change
@@ -62,22 +552,6 @@
         htmlString += "</tbody></table>"
 
         return htmlString;
-    }
-
-    let calculateReps = function (weight, repin, repout) {
-        let pers = [
-            100,
-            94,
-            91,
-            88,
-            86,
-            83,
-            82,
-            78,
-            77,
-            73,
-        ]
-        return Math.round(weight / pers[repin - 1] * pers[repout - 1] * 2) / 2;
     };
 
     let getData = function () {
@@ -88,32 +562,66 @@
         });
     };
 
-    let rndHalf = function (num) {
-    	// rounds to nearest 0.5lbs
-        return Math.round(num * 2) / 2;
-    };
+    let addCalendar = function (dates, $div) {
+    	let html = 
+			'<div style="margin-top:10px;margin-bottom:10px;" id="app">' +
+			"<v-calendar is-expanded :attributes='attrs'></v-calendar>" +
+			"</div>";
 
-    let rnd5 = function (num) {
-    	// rounds to only 5's 15, 25, etc
-        let rnd1 = Math.round(num / 5) * 5;
-        let rnd2 = Math.round((num + 2.5) / 5) * 5;
-        let rnd3 = Math.round((num - 2.5) / 5) * 5;
-        let ret = rnd1
+		$div.append($(html));
 
-        if (rnd1 / 10 === Math.round(rnd1 / 10)) {
-            ret = rnd2;
-        }
+		let todayString = (new Date()).toLocaleDateString();
 
-        if (rnd2 / 10 === Math.round(rnd2 / 10)) {
-            ret = rnd3;
-        }
+		let today = {
+			key: 'today',
+			dates: new Date(),
+			highlight: {
+				fillMode: 'solid',
+				style: {
+					"background-color": 'blue'
+				}
+			}
+		};
 
-        return ret;
-    };
+		let events = createCalendarEvents(dates);
 
-    let makeButton = function (text, clickFunc) {
+		let eventsArr = events.map(function (colorScheme) {
+			let ret = JSON.parse(JSON.stringify(colorScheme));
+
+			//determine length
+			let datesLen = ret.dates.length;
+
+			//filter looking for today
+			ret.dates = ret.dates
+				.map(a => new Date(a))
+				.filter(a => a.toLocaleDateString() !== todayString);
+
+			//if found today then change today options
+			if (ret.dates.length !== datesLen) {
+				today.highlight.style = JSON.parse(JSON.stringify(colorScheme.highlight.style));
+				today.highlight.style["background-color"] = today.highlight.style["border-color"];
+				today.popover = JSON.parse(JSON.stringify(colorScheme.popover));
+			}
+
+			return ret;
+		});
+
+		eventsArr.push(today);
+
+		new Vue({
+			el: '#app',
+			data: {
+				selectedDate: null,
+				attrs: eventsArr
+			}
+		});
+    }
+
+    let makeButton = function (text, clickFunc, decor) {
+    	decor = decor || ""
     	let btn = $("<button>", {
     		text: text,
+    		style: decor,
     		class: 'btn btn-outline-primary',
     		type: "button"
     	});
@@ -123,27 +631,73 @@
     	return btn;
     };
 
+    let createCalendarEvents = function (dates) {
+    	console.log(dates);
+    	//Create 1 month projection of events
+        let today = new Date();
+    	let dayMult = 1000 * 60 * 60 * 24;
+    	today = new Date(today.toLocaleDateString()) * 1; // clear time
+
+    	let eventsObj = {};
+    	const cutoff = new Date("1/1/22");
+		dates.filter(date => date.date > cutoff).forEach(function (date) {
+			eventsObj[date.day.day] = eventsObj[date.day.day] || {
+				key: 'day' + date.day.day,
+				cycleLength: date.day.cycleLength,
+				dates: [],
+				highlight: {
+					fillMode: "outline",
+					style: {
+						"border-color": date.day.color
+					}
+				},
+        		popover: {
+        			hideIndicator: true,
+        			label: "Day " + date.day.day + ": " + date.day.movements.map(a => a.movement).join(', ')
+        		}
+			};
+			eventsObj[date.day.day].dates.push(date.date);
+		});
+		
+		let events = Object.keys(eventsObj).map(day => eventsObj[day]);
+
+		events = events.map(function (eventObj) {
+			let lastDate = eventObj.dates.sort((a, b) => b - a)[0];
+			for (let i = 0; i < 4; i += 1) {
+        		let tmpDay = lastDate * 1 + (i + 1) * eventObj.cycleLength * dayMult;
+        		if (today > tmpDay) {
+        			tmpDay = today;
+        			lastDate = today;
+        			i -= 1;
+        			today += dayMult;
+        		}
+        		eventObj.dates.push(new Date(tmpDay));
+        	}
+        	return eventObj;
+		});
+
+		return events;
+    };
+
     let onGet = function (data) {
-    	// only called after initial data load
+    	// function called on initial load and following submit
 
-    	//filter my lifts for recent data
-    	data.lifts = data.lifts.map(function (row) {
-            row.date = new Date(row.date);
-            return row;
-        }).filter(row => row.date > new Date("11/1/2021"));
+    	// build object to interact with data
+    	const myDataObj = buildDataObject(data);
 
-        //Build options for dashboard vs lifting day
-        let programObj = {};
-        let liftsObj = {};
-        data.program.forEach(function (lift) {
-        	programObj[lift.day] = 1;
-        	liftsObj[lift.movement] = 1;
-        });
-
+    	//identify main areas of page
+    	let $navigation = $("#navigation")
         let $div = $('#main');
         let $workout = $('#workout');
+
+        //define button div, and append to navigation tab
         let btndiv = $("<div>", {class: "btn-group"});
+        btndiv.appendTo($navigation);
+
+        // set state variable
         let state = "";
+
+        let byDay = myDataObj.get.days();
 
         //dashboard view
         makeButton("Dasboard", function () {
@@ -152,13 +706,17 @@
         	if (state !== "Dashboard") {
         		$div.empty();	
         		state = "Dasboard";
-        		Object.keys(liftsObj)
-	        		.forEach(lift => buildDashboardElement(data, lift));
+        		addCalendar(myDataObj.get.dates(), $div);
+        		myDataObj.get.movement()
+	        		.forEach(lift => buildDashboardElement(lift));
         	}
-        }).appendTo(btndiv);
+        }).appendTo(btndiv).click();
+
+        console.log('get days', myDataObj.get.days());
 
         // workout views
-        Object.keys(programObj).forEach(function (day) {
+        byDay.forEach(function (dayObj) {
+        	let day = dayObj.day
         	makeButton('Day ' + day, function () {
         		$div.show();
 	        	$workout.hide();
@@ -166,17 +724,18 @@
         		if (state !== 'Day ' + day) {
 	        		$div.empty();	
 	        		state = 'Day ' + day;
-	        		let thisProgram = data.program.filter(a => a.day === day)
-	        		thisProgram.forEach(lift => buildDashboardElement(data, lift.movement));
-	        		addWorkoutButton(data, thisProgram);
+
+	        		// build the UI elements
+	        		dayObj.movements.forEach(lift => buildWorkoutElement(lift));
+
+	        		addWorkoutButton(dayObj);
 	        	}
-        	}).appendTo(btndiv);
+        	}, "font-weight:bold;color: " + dayObj.color).appendTo(btndiv);
 
         });
-        btndiv.appendTo($("#navigation"));
     };
 
-    let addWorkoutButton = function (data, program) {
+    let addWorkoutButton = function (dayObj) {
     	let $main = $('#main');
     	let $workout = $('#workout');
 
@@ -219,7 +778,7 @@
     			buildWorkout({
     				name: inputs[ind].name,
     				weight: inputs[ind].value,
-    				program: program.filter(a => a.movement === inputs[ind].name)[0]
+    				program: dayObj.movements.filter(a => a.movement === inputs[ind].name)[0]
     			}, $workout);
     		});
 
@@ -243,14 +802,15 @@
 
     			// transform into a table
     			let submitTable = formKeys.map(function (key) {
-    				//format in table is: movement;weight;date;difficulty;sets;repetitions
+    				//format in table is: movement;weight;date;difficulty;sets;repetitions;wkday
     				return [
     					formEntries[key].movement,
     					formEntries[key].weight,
     					(new Date()).toLocaleDateString(),
     					0, // difficulty
     					1, // sets
-    					formEntries[key].reps
+    					formEntries[key].reps, //reps
+    					dayObj.day // selected day
     				];
     			});
     			
@@ -292,28 +852,26 @@
 			$(html).appendTo($body);
     	})
     	.appendTo($div);
-
-    };
-
-    let randStr = function () {
-    	// builds random string for ID.
-        return Math.random().toString().replace(/0\./, "");
     };
 
     let addComponents = function ($div, identifier, divName) {
+    	//create left column
+    	let $left = $('<div>', {
+    		class: "col-md-12 col-lg-6",
+    	}).appendTo($div);
+
     	// add header
     	$('<h2>', {
     		text: identifier
-    	}).appendTo($div);
+    	}).appendTo($left);
 
-    	// add figure column
+    	// add figure
     	$('<div>', {
-    		class: "col-md-12 col-lg-6",
     		id: divName
-    	}).appendTo($div);
+    	}).appendTo($left);
 
     	// Add data column
-    	let $column2 = $('<div>', {
+    	let $right = $('<div>', {
     		class: "col-md-12 col-lg-6"
     	}).appendTo($div);
 
@@ -321,173 +879,377 @@
     	$('<hr>').appendTo($div);
 
     	//add all data regions, and return an object
-    	return {
-    		nextTable: $('<p>').appendTo($column2),
-    		info: $('<p>').appendTo($column2),
-    		goalProject: $('<p>').appendTo($column2),
-    		workoutAmt: $('<p>').appendTo($column2),
-    		workout: $('<p>').appendTo($column2)
-    	};
+    	return $right;
     };
 
-    let summarizeData = function (dataObj, identifier) {
-    	let data = dataObj.lifts;
-        let byDateData = {};
-        let summaryData = [];
+    const buildLiftInfoTable = (function () {
+    	const liftTableMaker = function (liftInfo, buttons) {
+	    	let $div = $('<div>');
+	    	let $header = $("<h5>", {text: "Prior Lift (" + liftInfo.date.toLocaleDateString("en-US") + ")"});
+	    	let $btnGroup = $('<div>', {
+	    		class: "btn-group float-end"
+	    	}).append(buttons.last).append(buttons.next).appendTo($header);
 
-        //filter and break up by date
-        data
-            .filter(a => a.movement === identifier)
-            .forEach(function (lift) {
-                byDateData[lift.date.toDateString()] =
-                    byDateData[lift.date.toDateString()] || [];
-                byDateData[lift.date.toDateString()].push(lift);
-            });
+	    	let table = [["Lift", "Reps", "Weight", "1RM (Calc)"]];
+	    	liftInfo.lifts.forEach(function (lift, ind) {
+	    		for (let i = 0; i < lift.sets; i+= 1) {
+	    			table.push([
+	    				"Work set " + (ind + i + 1), 
+	    				lift.repetitions,
+	    				lift.weight,
+	    				calculateReps(lift.weight, lift.repetitions, 1)
+	    			]);
+	    		}
+	    	});
+	    	let $table = $(createBootTable(table));
+	    	$div.append($header);
+	    	$div.append($table);
+	    	return $div;
+	    }
+    	return function (lifts) {
+	    	let $div = $('<div>');
+	    	let currentIndex = 0;
 
-        // broken up by date now pull info per day
-        Object.keys(byDateData).forEach(function (date) {
-            let oneRepMax = 0;
-            let maxAttempt = 0;
-            let totalWork = 0;
-            let totalByWeight = {};
-            let difficulty;
-            byDateData[date].forEach(function (lift) {
-                totalByWeight[lift.weight] = totalByWeight[lift.weight] || 0;
-                totalByWeight[lift.weight] += lift.repetitions * lift.sets;
-                let thisRep = calculateReps(lift.weight, lift.repetitions, 1)
-                oneRepMax = Math.max(oneRepMax, thisRep);
-                maxAttempt = Math.max(maxAttempt, lift.weight);
-                totalWork += lift.weight * lift.repetitions * lift.sets;
-                difficulty = lift.difficulty;
-            });
-            summaryData.push({
-                date: new Date(date),
-                difficulty: difficulty,
-                work: totalWork,
-                oneRM: oneRepMax,
-                maxRep: maxAttempt,
-                lifts: byDateData[date],
-                counts: Object.keys(totalByWeight)
-                    .map(key => [key, totalByWeight[key]])
-            });
-        });
-        return summaryData;
-    }
+	    	const buildButtons = function () {
+	    		// have to scope this to allow buttons to be recreated each time they change
+				let $lastBtn = $('<button>', {
+		    		class: 'btn btn-sm btn-outline-secondary',
+		    		html: "&#8592;"
+		    	}).click(function (evt) {
+		    		evt.preventDefault();
 
-    let getGoal = function (goals, last) {
-    	let thisGoal = goals[0];
-        let goalIndex = 0;
+		    		//redetermine index
+		    		currentIndex = Math.min(currentIndex + 1, lifts.length - 1);
 
-        while (last.oneRM >= thisGoal["weight (1RM)"] && goalIndex < goals.length - 1) {
-            goalIndex += 1;
-            thisGoal = goals[goalIndex];
-        }
+		    		$div.empty();
+		    		$div.append(liftTableMaker(lifts[currentIndex], buildButtons()));
+		    	});
 
-        return thisGoal;
-    };
+		    	let $nextBtn = $('<button>', {
+		    		class: 'btn btn-sm btn-outline-secondary',
+		    		html: "&#8594;"
+		    	}).click(function (evt) {
+		    		evt.preventDefault();
 
-    let buildDashboardElement = function (dataObj, identifier) {
-    	let data = dataObj.lifts;
-        let goals = dataObj.goals
-            .filter(a => a.movement === identifier)
-            .map(function (goal) {
-                goal.date = new Date(goal.date);
-                return goal;
-            })
-            .sort((a, b) => a.date - b.date);
-        let program = dataObj.program.filter(a => a.movement === identifier);
-        let divName = identifier.toLowerCase().replace(/\s/, "_");
+					//redetermine index
+		    		currentIndex = Math.max(currentIndex - 1, 0);
 
-      	// add components
-      	let $div = $("#main");
-      	let page = addComponents($div, identifier, divName);
+		    		//Replace with new elements
+		    		$div.empty();
+		    		$div.append(liftTableMaker(lifts[currentIndex], buildButtons()));
+		    	});
 
-        // summarize data by date
-        let summaryData = summarizeData(dataObj, identifier);
+	    		return {
+	    			last: $lastBtn,
+	    			next: $nextBtn
+	    		}
+	    	}
 
-        // get last lift as well as rep/set setup
-        let last = summaryData.sort((a, b) => b.date - a.date)[0];
-        let reps = program[0].repetitions;
-        let sets = program[0].sets;
+			$div.append(liftTableMaker(lifts[currentIndex], buildButtons()));
 
-        // define current goal
-        let goalObj = getGoal(goals, last); // already filtered by identifier
-        let goalRep = calculateReps(goalObj["weight (1RM)"], 1, reps);
+	    	return $div;
+	    };
+    }());
 
-        // create figure
-        buildFigure(summaryData, divName);
+    const buildWorkoutElement = (function () {
+    	const getGoalTable = function (workoutObj) {
 
-        // display goals and last
-        page.info.html(
-            "<p><b>Last:</b> " + last.counts.sort((a, b) => b[0] - a[0]).map(a => a[0] + " lbs x " + a[1] + " reps").join(', ') +
-            " (1RM: " + last.oneRM + " lbs)" +
-            "</p>" +
-            "<p><b>Goal (" + goalObj.date.toLocaleDateString("en-US") + "):</b> " +
-            goalRep + " lbs " + reps + "RM" +
-            " (" + goalObj["weight (1RM)"] + " lbs 1RM)</p>"
-        );
+	    	// assign key values
+	    	let $ret = $('<div>');
+	    	let sets = workoutObj.sets;
+	    	let reps = workoutObj.repetitions;
+	    	let progress = workoutObj.progress;
+	    	let movementObj = workoutObj.movementObj;
+	    	
+	    	// determine current goal
+	    	let goalInd = 0;
+	    	let current = progress.completeWorkoutWeight;
+	    	let goalWeight;
+	    	do {
+	    		goal = movementObj.goals[goalInd];
+	    		goalWeight = calculateReps(goal[oneRMKey], 1, reps);
+				goalInd += 1;
+	    	} while (goalInd < movementObj.goals.length && goalWeight < current)
 
-        // calculate needed growth
-        let toGoal = (goalObj["weight (1RM)"] - last.oneRM) / goalObj["weight (1RM)"];
-        let workOutsToTotal = Math.floor((goalObj.date - last.date) / 1000 / 60 / 60 / 24 / program[0].cycleLength);
+	    	// determine lifting days to goal
+	    	let daysToGoal = 0;
+    		movementObj.days.forEach(function (day) {
+    			daysToGoal += Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
+    		});
 
-        // Display needed growth
-        page.goalProject.html(Math.ceil(toGoal / workOutsToTotal * 1000) / 10 + "% increase needed in each of " + workOutsToTotal + " sessions to reach goal.");
+    		// make sentence concerning goal
+    		let toGoal = goalWeight - current;
+    		let perInc = Math.ceil(toGoal / goalWeight * 1000) / 10;
+    		let toGoalPerSes = Math.ceil(toGoal / daysToGoal * 10) / 10;
+    		let perIncPerSes = Math.ceil(perInc / daysToGoal * 10) / 10;
+    		$('<p>', {
+    			text: "The current goal is to reach " + goalWeight 
+    			+ " lbs for reps by " + goal.date.toLocaleDateString("en-us") 
+    			+ " in " + daysToGoal + " sessions"
+    			+ ". This is an increase of " +  toGoal
+    			+ " lbs (" + perInc + "%)"
+    			+ " or " + toGoalPerSes + " lbs ("
+    			+ perIncPerSes + "%) per session."
+    		}).appendTo($ret);
 
-        //create table for next lift
-        let equalReps = calculateReps(last.oneRM, 1, reps);
-        let equalWork = rndHalf(last.work / (sets * reps));
-        let nextTable = [
-            ["Metric", "Equivalent (lbs)", "+1.5% (lbs)", "+3% (lbs)", "+4.5% (lbs)"],
-            [
-                reps + "-rep",
-                equalReps,
-                rndHalf(equalReps + goalRep * 0.015),
-                rndHalf(equalReps + goalRep * 0.03),
-                rndHalf(equalReps + goalRep * 0.045)
-            ],
-            [
-                "Work (" + (sets * reps) + " reps)",
-                equalWork,
-                rndHalf(equalWork + goalRep * 0.015),
-                rndHalf(equalWork + goalRep * 0.03),
-                rndHalf(equalWork + goalRep * 0.045)
-            ]
-        ];
+    		// build goal table
+	    	let goalTable = [
+	    		["Last", "Calc", "Min", "1.5%", "3%", "4.5%"],
+	    		[
+	    			current,
+	    			calculateReps(progress.oneRM, 1, reps),
+	    			rndHalf(current * (1 + perIncPerSes / 100)),
+	    			rndHalf(current * 1.015),
+					rndHalf(current * 1.03),
+					rndHalf(current * 1.045)
+	    		]
+	    	];
 
-      //   nextTable: $('<p>').appendTo($column2),
-    		// info: $('<p>').appendTo($column2),
-    		// goalProject: $('<p>').appendTo($column2),
-    		// workoutAmt: $('<p>').appendTo($column2),
-    		// workout: $('<p>').appendTo($column2)
+	    	$ret.append($(createBootTable(goalTable)));
 
-        //display next lifts table
-        page.nextTable.html(createBootTable(nextTable));
+	    	return {
+	    		default: rndHalf(current * (1 + perIncPerSes / 100)),
+	    		table: $ret
+	    	};
+	    };
 
-        // build next weight area
-        let weightid = "weight" + randStr();
+    	return function (workoutObj) {
+			console.log(workoutObj);
 
-        // add the elements
-        $workoutWeight = $('<input>', {
-        	class: "form-control",
-        	name: identifier,
-        	id: weightid,
-        	value: equalReps
-        });
-        $('<div>', {class: "mb-3"})
-        	.append($('<label>', {
-        		class: "form-label",
-        		for: weightid,
-        		html: "<b>Work Set Weight</b>"
-        	}))
-        	.append($workoutWeight)
-        	.appendTo(page.workoutAmt);
-    }
+			const identifier = workoutObj.movement;
+			const divName = identifier.toLowerCase().replace(/\s/, "_");
+			const movementObj = workoutObj.movementObj;
 
-    let buildFigure = function (summaryData, divName) {
+			// identify components
+		  	let $div = $("#main");
+
+		  	// add the basic components
+		  	let $page = addComponents($div, identifier, divName);
+
+		  	// create figure
+		    buildFigure(movementObj.liftsByDate, divName);
+
+		    // build last lift table
+		    let $table = buildLiftInfoTable(movementObj.liftsByDate);
+		    $page.append($table);
+
+		    //build next goal table
+		    let goals = getGoalTable(workoutObj);
+	        $page.append($("<h5>", {text: "Goals"}));
+	        $page.append(goals.table);
+
+	        //add in weight select form
+	        let weightid = "weight" + randStr();
+	        let $workoutWeight = $('<input>', {
+	        	class: "form-control",
+	        	name: identifier,
+	        	id: weightid,
+	        	value: goals.default
+	        });
+
+	        $('<div>', {class: "mb-3"})
+	        	.append($('<label>', {
+	        		class: "form-label",
+	        		for: weightid,
+	        		html: "<b>Work Set Weight</b>"
+	        	}))
+	        	.append($workoutWeight)
+	        	.appendTo($page);
+		};
+    }());
+
+    const buildDashboardElement = (function () {
+
+    	const getGoalTable = function (movementObj) {
+
+	    	// start header
+	    	let goalTable = [["Date", "Sessions"]];
+	    	let headerOffset = 2;
+
+	    	//determine unique rep/sets
+	    	let repSets = {};
+			let ind = 0;
+	    	movementObj.days.forEach(function (day) {
+	    		let repSetStr = day.sets + " sets of " + day.repetitions;
+	    		if (repSets.hasOwnProperty(repSetStr)) {
+	    			repSets[repSetStr].days.push(day.day);
+	    			repSets[repSetStr].dayOrigin.push(day);
+	    		} else {
+	    			repSets[repSetStr] = {
+	    				reps: day.repetitions,
+	    				index: ind + headerOffset,
+	    				days: [day.day],
+	    				dayOrigin: [day]
+	    			};
+	    			ind += 1;
+	    		}
+	    	});
+
+	    	//add in current row
+	    	let currentRow = ["Current", "NA"];
+
+	    	// find current based on unique days if applicable
+	    		// also add line to header
+	    	Object.keys(repSets).forEach(function(key) {
+	    		// add to header
+	    		goalTable[0][repSets[key].index] = key + "<br />(Day";
+	    		if (repSets[key].days.length > 1) {
+	        			goalTable[0][repSets[key].index] += "s";
+	    		}
+	    		goalTable[0][repSets[key].index] += ": " + repSets[key].days.join(", ") + ")"
+
+	    		//now find progress, actual day does not matter as rep/sets are the same
+	    		let progress = repSets[key].dayOrigin[0].progress
+
+	    		currentRow.push(progress.completeWorkoutWeight);
+
+	    	});
+
+	    	// find oneRM
+	    	let max1RM = 0;
+			movementObj.liftsByDate
+				.forEach(lift => max1RM = Math.max(max1RM, lift.oneRM));
+
+	    	//Add 1rm header, and 1RM progress
+	    	goalTable[0].push("1RM");
+	    	currentRow.push(max1RM);
+	    	goalTable.push(currentRow);
+	    	
+	    	// add in progress stuff
+	    	movementObj.goals.forEach(function (goal) {
+	    		let row = [
+	    			goal.date.toLocaleDateString("en-US")
+	    		];
+
+	    		//calculate days to goal
+	    		let daysToGoal = 0;
+	    		movementObj.days.forEach(function (day) {
+	    			daysToGoal += Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
+	    		});
+	    		row.push(daysToGoal);
+
+	    		let maxLeft = 0;
+	    		Object.keys(repSets).forEach(function(key) {
+	    			//grab progress, actual day does not matter as rep/sets are the same
+		    		let progress = repSets[key].dayOrigin[0].progress
+	    			
+	    			// determine rep/set goals
+	    			let goalWeight = calculateReps(goal[oneRMKey], 1, repSets[key].reps);
+
+	    			// calculate pounds to goal
+	    			let poundsToGoal = Math.max(0, goalWeight - progress.completeWorkoutWeight);
+
+	    			// determine max left
+	    			maxLeft = Math.max(maxLeft, poundsToGoal);
+
+	    			row.push(goalWeight + " (+" + poundsToGoal + ")");
+	    		});
+
+	    		let poundsTo1RM = Math.max(0, goal[oneRMKey] - max1RM);
+	    		maxLeft = Math.max(maxLeft, poundsTo1RM);
+
+	    		row.push(goal[oneRMKey] + " (+" + poundsTo1RM + ")");
+	    		
+	    		if (maxLeft <= 0) {
+	    			row = row.map(a => '<span style="color: green;">' + a + '</span>');
+	    		}
+
+
+	    		goalTable.push(row);
+	    	});
+
+	        return createBootTable(goalTable);
+	    };
+
+    	return function (movementObj) {
+	    	const identifier = movementObj.movement;
+	    	const divName = identifier.toLowerCase().replace(/\s/, "_");
+
+	      	// identify components
+	      	let $div = $("#main");
+
+	      	// add the basic components
+	      	let $page = addComponents($div, identifier, divName);
+
+	        // get last lift
+	        //let last = movementObj.liftsByDate[0];
+
+	        // create figure
+	        buildFigure(movementObj.liftsByDate, divName);
+
+	        // build last lift table
+	        let $table = buildLiftInfoTable(movementObj.liftsByDate);
+	        $page.append($table);
+
+	        // Determine goals by program day
+	        let goalTable = getGoalTable(movementObj);
+	        $page.append($("<h5>", {text: "Goals"}));
+	        $page.append($(goalTable));
+
+	        return;
+
+	        // calculate needed growth
+	        let toGoal = (goalObj["weight (1RM)"] - last.oneRM) / goalObj["weight (1RM)"];
+	        let workOutsToTotal = Math.floor((goalObj.date - last.date) / 1000 / 60 / 60 / 24 / program[0].cycleLength);
+
+	        // Display needed growth
+	        page.goalProject.html(Math.ceil(toGoal / workOutsToTotal * 1000) / 10 + "% increase needed in each of " + workOutsToTotal + " sessions to reach goal.");
+
+	        //create table for next lift
+	        let equalReps = calculateReps(last.oneRM, 1, reps);
+	        let equalWork = rndHalf(last.work / (sets * reps));
+	        let nextTable = [
+	            ["Metric", "Equivalent (lbs)", "+1.5% (lbs)", "+3% (lbs)", "+4.5% (lbs)"],
+	            [
+	                reps + "-rep",
+	                equalReps,
+	                rndHalf(equalReps + goalRep * 0.015),
+	                rndHalf(equalReps + goalRep * 0.03),
+	                rndHalf(equalReps + goalRep * 0.045)
+	            ],
+	            [
+	                "Work (" + (sets * reps) + " reps)",
+	                equalWork,
+	                rndHalf(equalWork + goalRep * 0.015),
+	                rndHalf(equalWork + goalRep * 0.03),
+	                rndHalf(equalWork + goalRep * 0.045)
+	            ]
+	        ];
+
+	      //   nextTable: $('<p>').appendTo($column2),
+	    		// info: $('<p>').appendTo($column2),
+	    		// goalProject: $('<p>').appendTo($column2),
+	    		// workoutAmt: $('<p>').appendTo($column2),
+	    		// workout: $('<p>').appendTo($column2)
+
+	        //display next lifts table
+	        page.nextTable.html(createBootTable(nextTable));
+
+	        // build next weight area
+	        let weightid = "weight" + randStr();
+
+	        // add the elements
+	        $workoutWeight = $('<input>', {
+	        	class: "form-control",
+	        	name: identifier,
+	        	id: weightid,
+	        	value: equalReps
+	        });
+	        $('<div>', {class: "mb-3"})
+	        	.append($('<label>', {
+	        		class: "form-label",
+	        		for: weightid,
+	        		html: "<b>Work Set Weight</b>"
+	        	}))
+	        	.append($workoutWeight)
+	        	.appendTo(page.workoutAmt);
+	    };
+    }());
+
+    const buildFigure = function (summaryData, divName) {
 
         let figData = [
-            ["Date", "1RM (Calc)", "Work", "Max Rep"]
+            ["Date", "1RM (Calc)", "Work", "Max Load"]
         ];
         summaryData.forEach(a => figData.push([
         	a.date,
@@ -544,7 +1306,7 @@
         google.charts.setOnLoadCallback(buildIt);
     };
 
-    let post = function (data) {
+    const post = function (data) {
     	let postObj = {
     		data: data,
     		key: posterKey
@@ -566,7 +1328,7 @@
 	    	}
 	    	throw "Did not work";
 	    });
-	}
+	};
 
     //actually get things started
     google.charts.load('51', {
