@@ -1197,6 +1197,7 @@
 	        let $workoutWeight = $('<input>', {
 	        	class: "form-control",
 	        	type: "number",
+	        	inputmode: "decimal",
 	        	name: identifier,
 	        	id: weightid,
 	        	value: goals.default
@@ -1384,6 +1385,7 @@
 	        $workoutWeight = $('<input>', {
 	        	class: "form-control",
 	        	type: "number",
+	        	inputmode: "decimal",
 	        	name: identifier,
 	        	id: weightid,
 	        	value: equalReps
