@@ -820,7 +820,7 @@
         let byDay = myDataObj.get.days();
 
         //dashboard view
-        makeButton("Dasboard", function () {
+        let $dashBtn = makeButton("Dasboard", function () {
         	$div.show();
         	$workout.hide();
         	if (state !== "Dashboard") {
@@ -857,9 +857,9 @@
         		myDataObj.get.movement()
 	        		.forEach(lift => buildDashboardElement(lift, $hold));
         	}
-        }).appendTo(btndiv).click();
+        }).appendTo(btndiv);
 
-        console.log('get days', myDataObj.get.days());
+        // console.log('get days', myDataObj.get.days());
 
         // workout views
         byDay.forEach(function (dayObj) {
@@ -880,6 +880,8 @@
         	}, "font-weight:bold;color: " + dayObj.color).appendTo(btndiv);
 
         });
+
+        setTimeout(function () {$dashBtn.click()}, 500);
     };
 
     let addWorkoutButton = function (dayObj) {
