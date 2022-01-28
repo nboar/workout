@@ -144,7 +144,7 @@
 	///////////////////////////////////////
 	const calculateReps = function (weight, repin, repout) {
 		// simple calculation based on pers table above
-        return Math.round(weight / pers[repin - 1] * pers[repout - 1] * 2) / 2;
+        return rndHalf(weight / pers[repin - 1] * pers[repout - 1]);
     };
 	const rndHalf = function (num) {
     	// rounds to nearest 0.5lbs
@@ -761,7 +761,7 @@
     	}).appendTo($inpHold);
 
     	let $input = $('<input>', {
-    		type: "text",
+    		type: "number",
     		class: "form-control",
     		value: weight
     	}).appendTo($inputGrp);
@@ -1195,6 +1195,7 @@
 	        let weightid = "weight" + randStr();
 	        let $workoutWeight = $('<input>', {
 	        	class: "form-control",
+	        	type: "number",
 	        	name: identifier,
 	        	id: weightid,
 	        	value: goals.default
@@ -1381,6 +1382,7 @@
 	        // add the elements
 	        $workoutWeight = $('<input>', {
 	        	class: "form-control",
+	        	type: "number",
 	        	name: identifier,
 	        	id: weightid,
 	        	value: equalReps
