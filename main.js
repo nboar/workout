@@ -1,6 +1,7 @@
 (function () {
 
 	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
+	const weightPosterKey = "7vMb8qY2vW.Pd48e4unuE";
 	const startDate = new Date("11/1/2021");
 	const oneRMKey = "weight (1RM)";
 	const ONE_DAY =   1000 * 60 * 60 * 24;
@@ -382,9 +383,15 @@
 				// day: day of workout, as in day A, B, C, D
 				// date: calendar date of workout
 
+			console.log("dataObjIn", data);
+
 			let retObj = {};
 
 			retObj.get = {};
+
+			retObj.get.weight = function () {
+				return data.weight;
+			}
 
 			retObj.get.movement = function (getObj) {
 				// filter options: Workout day, Movement
@@ -564,7 +571,7 @@
 
     let addCalendar = function (dates, $div) {
     	let html = 
-			'<div style="margin-top:10px;margin-bottom:10px;" id="app">' +
+			'<div id="app">' +
 			"<v-calendar is-expanded :attributes='attrs'></v-calendar>" +
 			"</div>";
 
@@ -661,6 +668,7 @@
 		
 		let events = Object.keys(eventsObj).map(day => eventsObj[day]);
 
+		// add projections
 		events = events.map(function (eventObj) {
 			let lastDate = eventObj.dates.sort((a, b) => b - a)[0];
 			for (let i = 0; i < 4; i += 1) {
@@ -676,8 +684,115 @@
         	return eventObj;
 		});
 
+		//ensure no more than two days goes without a workout
+		// let eventSkipArr = events.map(a => a.dates)
+		// 	.reduce((a, b) => a.concat(b))
+		// 	.sort((a, b) => a * 1 - b * 1)
+		// 	.filter(a => a > new Date())
+		// 	.map((a) => { return {B: a, E: a}});
+
+		// let shifted = true;
+		// while(shifted) {
+		// 	shifted = false;
+		// 	for (let i = 0; i < eventSkipArr.length - 1; i += 1) {
+		// 		if (!shifted && eventSkipArr[i + 1].E * 1 - eventSkipArr[i].E * 1 > ONE_DAY * 2.1) {
+		// 			shifted = true;
+		// 		}
+		// 		if (shifted) {
+		// 			eventSkipArr[i + 1].E = new Date(eventSkipArr[i + 1].E * 1 - ONE_DAY)
+		// 		}
+		// 	}
+		// }
+
+		// // actually shift things
+		// console.log(eventSkipArr);
+		// let eventSkipArrB = eventSkipArr.map(a => a.B.toLocaleDateString());
+		// events = events.map(function (a) {
+		// 	a.dates.map(function (date, ind) {
+		// 		let foundInd = eventSkipArrB.indexOf(date.toLocaleDateString());
+		// 		if (foundInd >= 0) {
+		// 			a.dates[ind] = eventSkipArr[foundInd].E;
+		// 		}
+		// 	});
+		// 	return a;
+		// });
+
 		return events;
     };
+
+    let makeWeight = function (weight) {
+
+    	// for posting the weight
+    	let posted = false;
+    	let postData = function (data) {
+			post(data, weightPosterKey).then(function (res) {
+				console.log("posted?", res);
+				$('main').children().empty();
+				$('#workout')
+					.show()
+					.html('<div class="jumbotron jumbotron-fluid"><div class="container"><h2 class="display-4">Success!</h2><p class="lead">Submitted, loading data, once done, select a button above to continue.</p></div></div>');
+				getData();
+			}).catch(function (err) {
+				console.error(err);
+				$button.removeClass("btn-outline-primary");
+				$button.attr("disabled", false);
+				$button.addClass("btn-outline-danger");
+				$button.text("Failed, try again...");
+				posted = false;
+			});
+		};
+
+
+    	let $ret = $('<div>', {
+    		class: "row text-center h-100"
+    	});
+
+    	$('<h5>', {
+    		text: 'Current Weight'
+    	}).appendTo($ret);
+
+    	let $inpHold = $('<form>', {
+    		class: "align-middle"
+    	}).appendTo($ret);
+
+    	let $inputGrp = $('<span>', {
+    		id: "weightForm",
+    		class: "input-group mb-3",
+    	}).appendTo($inpHold);
+
+    	let $input = $('<input>', {
+    		type: "text",
+    		class: "form-control",
+    		value: weight
+    	}).appendTo($inputGrp);
+
+    	$('<span>', {
+    		class: "input-group-text",
+    		text: "lbs"
+    	}).appendTo($inputGrp);
+
+    	let $inputGrp2 = $('<span>', {
+    		id: "w-100 weightForm",
+    		class: "input-group mb-3"
+    	}).appendTo($inpHold);
+
+    	let $button = $('<button>', {
+    		class: "w-100 btn btn-outline-primary",
+    		type: "submit",
+    		value: "Submit",
+    		text: "Update"
+    	}).click(function (evt) {
+    		evt.preventDefault();
+    		if (!posted) {
+    			posted = true;
+    			$button.text("Updating ...");
+    			$button.attr("disabled", true);
+    			postData($input.val() * 1);
+    		}
+    	}).appendTo($inputGrp2);
+
+    	return $ret;
+    }
 
     let onGet = function (data) {
     	// function called on initial load and following submit
@@ -689,6 +804,11 @@
     	let $navigation = $("#navigation")
         let $div = $('#main');
         let $workout = $('#workout');
+
+        // empty for replays
+        $navigation.empty();
+		$div.empty();
+		$workout.empty();
 
         //define button div, and append to navigation tab
         let btndiv = $("<div>", {class: "btn-group"});
@@ -706,9 +826,36 @@
         	if (state !== "Dashboard") {
         		$div.empty();	
         		state = "Dasboard";
-        		addCalendar(myDataObj.get.dates(), $div);
+
+        		let $hold = $('<div>', {
+        			class: "row",
+        		}).appendTo($("<div>", {
+        			class: "container"
+        		}).appendTo($div));
+
+        		//add the calendar
+        		let $cal = $('<div>', {
+        			class: "col-xs-12 col-sm-9",
+        			style: "margin-bottom: 10px; margin-top:10px;"
+        		}).appendTo($hold);
+        		addCalendar(myDataObj.get.dates(), $cal);
+
+        		// add the weight column
+        		let $weight = $('<div>', {
+        			class: "col-xs-12 col-sm-3",
+        			style: "margin-bottom: 10px; margin-top:10px;"
+        		}).append($("<div>", {
+        			class: "h-100 bg-light border rounded-3",
+        			style: "padding:10px"
+        		}).append(makeWeight(myDataObj.get.weight()))).appendTo($hold);
+
+        		$hold = $('<div>', {
+        			class: "row",
+        			style: "margin-bottom: 10px; margin-top:10px;"
+        		}).appendTo($div);
+        		
         		myDataObj.get.movement()
-	        		.forEach(lift => buildDashboardElement(lift));
+	        		.forEach(lift => buildDashboardElement(lift, $hold));
         	}
         }).appendTo(btndiv).click();
 
@@ -742,18 +889,19 @@
     	//setting this up so multiple submits cannot happen
     	let posted = false;
     	let postData = function (data) {
-			post(data).catch(function (err) {
-				console.error(err);
-				$submitBtn.removeClass("btn-primary");
-				$submitBtn.addClass("btn-danger");
-				$submitBtn.text("Failed, try again...");
-				posted = false;
-			}).then(function (res) {
+			post(data).then(function (res) {
 				$('main').children().empty();
 				$('#workout')
 					.show()
 					.html('<div class="jumbotron jumbotron-fluid"><div class="container"><h2 class="display-4">Success!</h2><p class="lead">Submitted, loading data, once done, select a button above to continue.</p></div></div>');
 				getData();
+			}).catch(function (err) {
+				console.error(err);
+				$submitBtn.removeClass("btn-primary");
+				$submitBtn.attr('disabled', false);
+				$submitBtn.addClass("btn-danger");
+				$submitBtn.text("Failed, try again...");
+				posted = false;
 			});
 		};
 
@@ -784,6 +932,9 @@
 
     		$submitBtn.click(function (evt) {
     			evt.preventDefault();
+
+    			$submitBtn.text("Submitting ...");
+    			$submitBtn.attr('disabled', true);
     			let formList = $workout.serializeArray();
 
     			//assign movement, reps, and weight per uid
@@ -1161,12 +1312,9 @@
 	        return createBootTable(goalTable);
 	    };
 
-    	return function (movementObj) {
+    	return function (movementObj, $div) {
 	    	const identifier = movementObj.movement;
 	    	const divName = identifier.toLowerCase().replace(/\s/, "_");
-
-	      	// identify components
-	      	let $div = $("#main");
 
 	      	// add the basic components
 	      	let $page = addComponents($div, identifier, divName);
@@ -1306,10 +1454,11 @@
         google.charts.setOnLoadCallback(buildIt);
     };
 
-    const post = function (data) {
+    const post = function (data, postKey) {
+    	postKey = postKey || posterKey;
     	let postObj = {
     		data: data,
-    		key: posterKey
+    		key: postKey
     	};
 
 		return fetch(deploymentURL, { 
