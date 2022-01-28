@@ -762,6 +762,7 @@
 
     	let $input = $('<input>', {
     		type: "number",
+    		inputmode: "decimal",
     		class: "form-control",
     		value: weight
     	}).appendTo($inputGrp);
