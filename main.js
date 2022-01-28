@@ -520,7 +520,7 @@
 
         for (let i = 0; i < sets; i += 1) {
         	let randID = lift + "_" + randStr();
-        	let htmlB = '<div class="input-group-sm"><input name="';
+        	let htmlB = '<div class="input-group-sm"><input inputmode="decimal" type="number" name="';
         	let htmlM = '" class="form-control" value=';
         	let htmlE = "></div>"
         	let repsHTML = htmlB + randID + "_reps" + htmlM + reps + htmlE;
