@@ -4,6 +4,7 @@
 	const weightPosterKey = "7vMb8qY2vW.Pd48e4unuE";
 	const startDate = new Date("11/1/2021");
 	const oneRMKey = "weight (1RM)";
+	const BAR_W = 45;
 	const ONE_DAY =   1000 * 60 * 60 * 24;
 	const pers = [ // weight ratio to 1RM 
         100, // 1RM
@@ -505,17 +506,73 @@
 		};
 	}());
 
+	let makeCheck = function () {
+		let randomID = randStr();
+        let $check = $('<span>', {
+        	class: 'workout-check'
+        });
+        let $checkbox = $('<input>', {
+        	type: "checkbox",
+        	class: "btn-check",
+        	id: randomID,
+        	value: "off",
+        	autocomplete: "off"
+        }).appendTo($check).click(function (evt) {
+        	evt.preventDefault();
+        	if ($checkbox.val() === "on") {
+        		$checkbox.val("off");
+        		$check.parent().parent().find('.form-control').attr('readonly', false);
+        		$check.parent().parent().css('background-color','transparent');
+        		$checkLabel.addClass("btn-outline-warning");
+        		$checkLabel.removeClass("btn-success");
+        		$checkLabel.html('<span class="material-icons align-middle">radio_button_unchecked</span>');
+        		
+        	} else {
+        		$checkbox.val("on");
+        		$check.parent().parent().find('.form-control').attr('readonly', true);
+        		$check.parent().parent().css('background-color','#e9fbf3');
+				$checkLabel.removeClass("btn-outline-warning");
+        		$checkLabel.addClass("btn-success");
+        		$checkLabel.html('<span class="material-icons align-middle">check_circle</span>');
+        	}
+        	console.log($checkbox.val());
+        });
+        let $checkLabel = $('<label>', {
+        	class: "btn btn-sm btn-outline-warning",
+        	for: randomID,
+        	html: '<span class="material-icons align-middle">radio_button_unchecked</span>'
+        }).appendTo($check);
+
+        return $check;
+	};
+
     let createRepTable = function (weight, lift, sets, reps) {
         // category, weight, per side, change
         // cats: 60, 80, 90, Working
         let a60 = rnd5(.6 * weight);
         let a80 = rnd5(.8 * weight);
         let a90 = rnd5(.9 * weight);
+        let d1 = a80 - a60;
+        let d2 = a90 - a80;
+        let d3 = weight - a90;
+
+        let ps1 = (a60 - BAR_W) / 2;
+        let ps2 = (a80 - BAR_W) / 2;
+        let ps3 = (a90 - BAR_W) / 2;
+        let ps4 = (weight - BAR_W) / 2;
+
+        let dd1 = ps2 - ps1;
+        let dd2 = ps3 - ps2;
+        let dd3 = ps4 - ps3;
+
+        let dHTMLB = '<p class="lh-1 text-decoration-underline" style=" margin: 0px; font-size:small">(+';
+        let dHTMLE = ')</p>';
+
         let table = [
-            ["Percentage", "Reps", "Weight", "Per Side", "Increase"],
-            ["60%", reps, a60, (a60 - 45) / 2, a60 - 45],
-            ["80%", Math.round(reps / 2), a80, (a80 - 45) / 2, a80 - a60],
-            ["90%", Math.round(reps / 3), a90, (a90 - 45) / 2, a90 - a80],
+            ["Set", "Reps", "Weight", "Per Side", "Done"],
+            ["WU: 60%", reps, a60 + dHTMLB + d1 + dHTMLE, ps1 + dHTMLB + dd1 + dHTMLE, makeCheck()],
+            ["WU: 80%", Math.round(reps / 2), a80 + dHTMLB + d2 + dHTMLE, ps2 + dHTMLB + dd2 + dHTMLE, makeCheck()],
+            ["WU: 90%", Math.round(reps / 3), a90 + dHTMLB + d3 + dHTMLE, ps3 + dHTMLB + dd3 + dHTMLE, makeCheck()]
         ];
 
         for (let i = 0; i < sets; i += 1) {
@@ -525,7 +582,7 @@
         	let htmlE = "></div>"
         	let repsHTML = htmlB + randID + "_reps" + htmlM + reps + htmlE;
         	let weightHTML = htmlB + randID + "_weight" + htmlM + weight + htmlE;
-        	table.push(["Work Set " + (i + 1), repsHTML, weightHTML, (weight - 45) / 2, weight - a90]);
+        	table.push(["WS " + (i + 1), repsHTML, weightHTML, ps4, makeCheck()]);
         }
 
         console.log(table);
@@ -536,29 +593,34 @@
     let createBootTable = function (arr) {
         let retObj = {};
         let randomID = randStr();
+
+        let $adder;
+        let $table = $('<table>', {
+        	class: "table table-sm"
+        });
+
         let htmlString = "";
         htmlString += '<table class="table table-sm">';
         arr.forEach(function (row, j) {
-            let td = "td";
+        	let tdInit = '<td>';
             if (j === 0) {
-                htmlString += "<thead>";
-                td = "th";
+            	$adder = $('<thead>').appendTo($table);
+            	let tdInit = '<th>';
             } else if (j === 1) {
-                htmlString += "<tbody>"
+            	$adder = $('<tbody>').appendTo($table);
             }
-            row.forEach(function (entry, i) {
-                htmlString += "<" + td + ">";
-                htmlString += entry;
-                htmlString += "</" + td + ">";
-            });
-            htmlString += "</tr>"
-            if (j === 0) {
-                htmlString += "</thead>"
-            }
-        });
-        htmlString += "</tbody></table>"
 
-        return htmlString;
+            let $tr = $('<tr>').appendTo($adder);
+            row.forEach(function (entry, i) {
+            	if (typeof entry === "string" || typeof entry === "number" || !entry) {
+            		$(tdInit).html(entry).appendTo($tr);
+            	} else {
+            		$(tdInit).append(entry).appendTo($tr);
+            	}
+            });
+        });
+
+        return $table;
     };
 
     let getData = function () {
@@ -987,7 +1049,7 @@
 
     	//Add the framework for the worktable
     	let $tableDiv = $("<div>").appendTo($div);
-    	let $workTable = $(createBootTable(createRepTable(move.weight, move.name, move.program.sets, move.program.repetitions)));
+    	let $workTable = createBootTable(createRepTable(move.weight, move.name, move.program.sets, move.program.repetitions));
     	$workTable.appendTo($tableDiv)
 
     	// Add the "add a row button"
@@ -1000,10 +1062,20 @@
     		console.log('adding to');
 			let $body = $workTable.children('tbody');
 			let html = $body.children(":last")[0].outerHTML;
-			let number = html.match(/Work Set (\d+)/)[1] * 1 + 1;
-			html = html.replace(/Work Set (\d+)/, "Work Set " + number);
+			let number = html.match(/WS (\d+)/)[1] * 1 + 1;
+			html = html.replace(/WS (\d+)/, "WS " + number);
 			html = html.replace(/_\d+_/g, "_" + randStr() + "_");
-			$(html).appendTo($body);
+			let $html = $(html);
+			// replaces the check mark button with a new one
+			let $newcheck = makeCheck();
+			$($html.find('.workout-check')[0]).replaceWith($newcheck);
+
+			$html.appendTo($body);
+
+			// clear the 'on state colors' as needed with a click click
+			let inp = $($newcheck.find('input')[0]);
+			inp.click().click();
+
     	})
     	.appendTo($div);
     };
@@ -1055,7 +1127,7 @@
 	    			]);
 	    		}
 	    	});
-	    	let $table = $(createBootTable(table));
+	    	let $table = createBootTable(table);
 	    	$div.append($header);
 	    	$div.append($table);
 	    	return $div;
@@ -1159,7 +1231,7 @@
 	    		]
 	    	];
 
-	    	$ret.append($(createBootTable(goalTable)));
+	    	$ret.append(createBootTable(goalTable));
 
 	    	return {
 	    		default: rndHalf(current * (1 + perIncPerSes / 100)),
@@ -1337,7 +1409,7 @@
 	        // Determine goals by program day
 	        let goalTable = getGoalTable(movementObj);
 	        $page.append($("<h5>", {text: "Goals"}));
-	        $page.append($(goalTable));
+	        $page.append(goalTable);
 
 	        return;
 
@@ -1376,7 +1448,7 @@
 	    		// workout: $('<p>').appendTo($column2)
 
 	        //display next lifts table
-	        page.nextTable.html(createBootTable(nextTable));
+	        page.nextTable.append(createBootTable(nextTable));
 
 	        // build next weight area
 	        let weightid = "weight" + randStr();
