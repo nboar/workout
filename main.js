@@ -1,3 +1,4 @@
+let GLOBAL;
 (function () {
 
 	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
@@ -168,6 +169,10 @@
 
         return ret;
     };
+    const rndQuart = function (num) {
+    	// rounds to nearest 0.25lbs
+        return Math.round(num * 4) / 4;
+    }
 
     ///////////////////////////////////////
 	// scope in the buildDataObject functions
@@ -546,9 +551,68 @@
         return $check;
 	};
 
-    let createRepTable = function (weight, lift, sets, reps) {
+    let createRepTable = function (weight, lift, sets, reps, $totalWork) {
         // category, weight, per side, change
         // cats: 60, 80, 90, Working
+        let makeRow = function () {
+        	let randID = lift + "_" + randStr();
+        	let $rep = $('<input>', {
+        		inputmode: "numeric",
+        		class: "form-control repCount",
+        		type: "number",
+        		step: "1",
+        		name: randID + "_reps",
+        		value: reps
+        	}).change(updateTotalWork);
+        	repsArr.push($rep)
+
+        	let $weight = $('<input>', {
+        		inputmode: "decimal",
+        		step: "0.5",
+        		class: "form-control weightAmount",
+        		type: "number",
+        		name: randID + "_weight",
+        		value: weight
+        	}).change(function () {
+        		$weight.val(rndHalf($weight.val()));
+        	}).change(updateTotalWork)
+        	.change(function () {
+        		$perSide.text(rndQuart(($weight.val() - BAR_W) / 2));
+        	});
+        	weightsArr.push($weight);
+
+        	let $perSide = $('<span>', {
+        		text: ps4
+        	});
+
+        	workSetIndex += 1;
+
+        	return [
+        		"WS " + (workSetIndex),
+        		$('<div>', {
+	        		class: "input-group-sm"
+	        	}).append($rep),
+        		$('<div>', {
+	        		class: "input-group-sm"
+	        	}).append($weight),
+        		$perSide,
+        		makeCheck()
+        	];
+        };
+
+        let updateTotalWork = function () {
+        	let reps = $table.find('.repCount');
+        	let weights = $table.find('.weightAmount');
+        	let work = 0;
+        	
+        	reps.each(function (ind, rep) {
+        		work += $(rep).val() * $(weights[ind]).val();
+        	});
+
+        	$totalWork.text(work);
+        	
+        };
+
         let a60 = rnd5(.6 * weight);
         let a80 = rnd5(.8 * weight);
         let a90 = rnd5(.9 * weight);
@@ -575,19 +639,48 @@
             ["WU: 90%", Math.round(reps / 3), a90 + dHTMLB + d3 + dHTMLE, ps3 + dHTMLB + dd3 + dHTMLE, makeCheck()]
         ];
 
-        for (let i = 0; i < sets; i += 1) {
-        	let randID = lift + "_" + randStr();
-        	let htmlB = '<div class="input-group-sm"><input inputmode="decimal" type="number" name="';
-        	let htmlM = '" class="form-control" value=';
-        	let htmlE = "></div>"
-        	let repsHTML = htmlB + randID + "_reps" + htmlM + reps + htmlE;
-        	let weightHTML = htmlB + randID + "_weight" + htmlM + weight + htmlE;
-        	table.push(["WS " + (i + 1), repsHTML, weightHTML, ps4, makeCheck()]);
+        let repsArr = [];
+        let weightsArr = [];
+        let workSetIndex = 0;
+
+        for (i = 0; i < sets; i += 1) {
+        	table.push(makeRow());
         }
 
-        console.log(table);
+        let $table = createBootTable(table);
 
-        return table;
+        let addRowFunc = function () {
+        	let $tableBody = $($table.children('tbody'));
+        	
+        	//update the last weight
+        	weight = $tableBody.children(':last').find('.weightAmount').val();
+        	ps4 = (weight - BAR_W) / 2;
+
+        	//add the row
+        	let $tr = $('<tr>').appendTo($tableBody);
+        	let tableArr = makeRow();
+        	createBootRow(tableArr, '<td>', $tr);
+
+        	//update the work
+        	updateTotalWork();
+        };
+
+
+
+        return {
+        	table: $table,
+        	addRow: addRowFunc
+        };
+    };
+
+    let createBootRow = function (arr, tdStr, $tr) {
+    	return arr.forEach(function (entry) {
+        	if (typeof entry === "string" || typeof entry === "number" || !entry) {
+        		$(tdStr).html(entry).appendTo($tr);
+        	} else {
+        		$(tdStr).append(entry).appendTo($tr);
+        	}
+        });
     };
 
     let createBootTable = function (arr) {
@@ -611,13 +704,7 @@
             }
 
             let $tr = $('<tr>').appendTo($adder);
-            row.forEach(function (entry, i) {
-            	if (typeof entry === "string" || typeof entry === "number" || !entry) {
-            		$(tdInit).html(entry).appendTo($tr);
-            	} else {
-            		$(tdInit).append(entry).appendTo($tr);
-            	}
-            });
+            createBootRow(row, tdInit, $tr);
         });
 
         return $table;
@@ -824,6 +911,7 @@
 
     	let $input = $('<input>', {
     		type: "number",
+    		step: "0.1",
     		inputmode: "decimal",
     		class: "form-control",
     		value: weight
@@ -855,7 +943,7 @@
     	}).appendTo($inputGrp2);
 
     	return $ret;
-    }
+    };
 
     let onGet = function (data) {
     	// function called on initial load and following submit
@@ -1043,14 +1131,23 @@
 
     let buildWorkout = function (move, $div) {
     	$("<h2>", {text: move.name}).appendTo($div);
-    	$("<p>", {
+    	let $information = $("<p>", {
     		text: move.weight + " lbs for " + move.program.sets + " sets of " + move.program.repetitions + " repetitions."
+    			+ " Did " + move.program.movementObj.liftsByDate[0].work + " lbs of work in prior workout. This time will be "
     	}).appendTo($div);
+
+    	let $thisWork = $('<span>', {
+    		text: move.program.sets * move.weight * move.program.repetitions
+    	}).appendTo($information);
+
+    	$('<span>', {text: " lbs."}).appendTo($information);
+
+    	console.log("looking here at something?", move)
 
     	//Add the framework for the worktable
     	let $tableDiv = $("<div>").appendTo($div);
-    	let $workTable = createBootTable(createRepTable(move.weight, move.name, move.program.sets, move.program.repetitions));
-    	$workTable.appendTo($tableDiv)
+    	let workTable = createRepTable(move.weight, move.name, move.program.sets, move.program.repetitions, $thisWork);
+    	workTable.table.appendTo($tableDiv)
 
     	// Add the "add a row button"
     	$('<button>', {
@@ -1059,23 +1156,7 @@
     		text: "Add Row"
     	}).click(function (evt) {
     		evt.preventDefault();
-    		console.log('adding to');
-			let $body = $workTable.children('tbody');
-			let html = $body.children(":last")[0].outerHTML;
-			let number = html.match(/WS (\d+)/)[1] * 1 + 1;
-			html = html.replace(/WS (\d+)/, "WS " + number);
-			html = html.replace(/_\d+_/g, "_" + randStr() + "_");
-			let $html = $(html);
-			// replaces the check mark button with a new one
-			let $newcheck = makeCheck();
-			$($html.find('.workout-check')[0]).replaceWith($newcheck);
-
-			$html.appendTo($body);
-
-			// clear the 'on state colors' as needed with a click click
-			let inp = $($newcheck.find('input')[0]);
-			inp.click().click();
-
+    		workTable.addRow();
     	})
     	.appendTo($div);
     };
@@ -1269,11 +1350,14 @@
 	        let $workoutWeight = $('<input>', {
 	        	class: "form-control",
 	        	type: "number",
+	        	step: "0.5",
 	        	inputmode: "decimal",
 	        	name: identifier,
 	        	id: weightid,
 	        	value: goals.default
-	        });
+	        }).change(function () {
+        		$workoutWeight.val(rndHalf($workoutWeight.val()));
+        	});
 
 	        $('<div>', {class: "mb-3"})
 	        	.append($('<label>', {
