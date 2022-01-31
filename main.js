@@ -6,7 +6,9 @@ let GLOBAL;
 	const startDate = new Date("11/1/2021");
 	const oneRMKey = "weight (1RM)";
 	const BAR_W = 45;
+	const PROJECT_TIME = 45; // days projected forward
 	const ONE_DAY =   1000 * 60 * 60 * 24;
+	const PER_INC = [1.5, 3, 4.5]; // for percent growth of movements
 	const pers = [ // weight ratio to 1RM 
         100, // 1RM
         94, // 2RM
@@ -178,6 +180,7 @@ let GLOBAL;
 	// scope in the buildDataObject functions
 	///////////////////////////////////////
 	const buildDataObject = (function () {
+		let lastGoalDate = new Date(new Date() * 1 + PROJECT_TIME * ONE_DAY);
 
 		const findProgramDays = function (dataArr) {
 	    	let outObj = {};
@@ -338,6 +341,58 @@ let GLOBAL;
 			};
 		};
 
+		const projectForward = function (daysObj, days) {
+			//Create 1 month projection of events
+	        let today = new Date();
+	    	let dayMult = 1000 * 60 * 60 * 24;
+	    	today = new Date(today.toLocaleDateString()) * 1; // clear time	    	
+
+	    	let lastDays = Object.keys(daysObj)
+	    		.map(day => { return {
+	    			date: daysObj[day].last,
+	    			day: day,
+	    			length: daysObj[day].cycleLength
+	    		}})
+	    		.sort((a, b) => a.date - b.date);
+
+	    	let nextInd = 0;
+	    	let shiftLength = lastDays.length;
+	    	let nextDay = clone(lastDays[nextInd].date);
+	    	while (nextDay * 1 <= lastGoalDate * 1) {
+	    		nextDay = clone(lastDays[nextInd].date) * 1 + lastDays[nextInd].length * ONE_DAY;
+	    		while (nextDay < today) {
+        			nextDay = nextDay * 1 + ONE_DAY;
+        		}
+        		while (nextDay * 1 <= lastDays[lastDays.length - 1].date * 1) {
+        			nextDay = nextDay * 1 + ONE_DAY;
+        		}
+        		lastDays.push({
+        			date: new Date(nextDay),
+        			day: lastDays[nextInd].day,
+        			length: lastDays[nextInd].length,
+        		});
+        		if (nextInd < shiftLength) {
+        			shiftLength -= 1;
+        			nextInd -= 1;
+        			lastDays.shift();
+        		}
+        		nextInd += 1;
+	    	}
+
+	    	// assign the list
+	    	Object.keys(daysObj)
+	    		.forEach(function (day) {
+	    			daysObj[day].future = lastDays
+	    				.filter(tmpDayObj => tmpDayObj.day === day)
+	    				.map(tmpDayObj => tmpDayObj.date)
+	    		});
+
+	    	// assign this list to the origin days array so it will end up in movements etc
+	    	days.forEach(function (dayObj) {
+	    		dayObj.future = daysObj[dayObj.day].future;
+	    	});
+		};
+
 		const calculateGoalProgress = function (movement) {
 			// movement.days will be attached with goal progress
 
@@ -467,6 +522,17 @@ let GLOBAL;
 					}
 					dates[dtString].lifts.push(lift);
 				});
+				days.forEach(function (day) {
+					daysObj[day].future.forEach(function (date) {
+						let dtString = date.toLocaleDateString("en-us");
+						dates[dtString] = dates[dtString] || {
+							date: date,
+							day: daysObj[day],
+							lifts: []
+						};
+					});
+				});
+
 				return clone(Object.keys(dates).map(d => dates[d]));
 			};
 
@@ -482,6 +548,7 @@ let GLOBAL;
 	        //turn goal dates into date objects
 	        data.goals = data.goals.map(function (row) {
 	        	row.date = new Date(row.date);
+	        	lastGoalDate = new Date(Math.max(row.date * 1, lastGoalDate * 1));
 	        	return row;
 	        });
 
@@ -489,12 +556,16 @@ let GLOBAL;
 	        let daysObj = flushOutPrograms(data);
 	        let days = Object.keys(daysObj);
 
+	        // project forward workout dates
+	        projectForward(daysObj, data.program);
+
 	        // flush out movement information
-	        let movementObj = getMovementInformation(data);
+	        let movementObj = getMovementInformation(data, daysObj);
 	        let movements = Object.keys(movementObj);
 
-	        // finally determine goal progress on the movementObj
+	        // finally determine goal progress on the movementObj and project forward
 	        movements.forEach(move => calculateGoalProgress(movementObj[move]));
+	        // console.log(clone(movementObj));
 
 	        console.log(data, daysObj, movementObj);
 
@@ -788,16 +859,9 @@ let GLOBAL;
     };
 
     let createCalendarEvents = function (dates) {
-    	console.log(dates);
-    	//Create 1 month projection of events
-        let today = new Date();
-    	let dayMult = 1000 * 60 * 60 * 24;
-    	today = new Date(today.toLocaleDateString()) * 1; // clear time
-
     	let eventsObj = {};
-    	const cutoff = new Date("1/1/22");
-		dates.filter(date => date.date > cutoff).forEach(function (date) {
-			eventsObj[date.day.day] = eventsObj[date.day.day] || {
+    	let makeEventObj = function (date) {
+    		eventsObj[date.day.day] = eventsObj[date.day.day] || {
 				key: 'day' + date.day.day,
 				cycleLength: date.day.cycleLength,
 				dates: [],
@@ -813,58 +877,13 @@ let GLOBAL;
         		}
 			};
 			eventsObj[date.day.day].dates.push(date.date);
-		});
+    	};
+
+    	
+    	const cutoff = new Date("1/1/22");
+		dates.filter(date => date.date > cutoff).forEach(makeEventObj);
 		
 		let events = Object.keys(eventsObj).map(day => eventsObj[day]);
-
-		// add projections
-		events = events.map(function (eventObj) {
-			let lastDate = eventObj.dates.sort((a, b) => b - a)[0];
-			for (let i = 0; i < 4; i += 1) {
-        		let tmpDay = lastDate * 1 + (i + 1) * eventObj.cycleLength * dayMult;
-        		if (today > tmpDay) {
-        			tmpDay = today;
-        			lastDate = today;
-        			i -= 1;
-        			today += dayMult;
-        		}
-        		eventObj.dates.push(new Date(tmpDay));
-        	}
-        	return eventObj;
-		});
-
-		//ensure no more than two days goes without a workout
-		// let eventSkipArr = events.map(a => a.dates)
-		// 	.reduce((a, b) => a.concat(b))
-		// 	.sort((a, b) => a * 1 - b * 1)
-		// 	.filter(a => a > new Date())
-		// 	.map((a) => { return {B: a, E: a}});
-
-		// let shifted = true;
-		// while(shifted) {
-		// 	shifted = false;
-		// 	for (let i = 0; i < eventSkipArr.length - 1; i += 1) {
-		// 		if (!shifted && eventSkipArr[i + 1].E * 1 - eventSkipArr[i].E * 1 > ONE_DAY * 2.1) {
-		// 			shifted = true;
-		// 		}
-		// 		if (shifted) {
-		// 			eventSkipArr[i + 1].E = new Date(eventSkipArr[i + 1].E * 1 - ONE_DAY)
-		// 		}
-		// 	}
-		// }
-
-		// // actually shift things
-		// console.log(eventSkipArr);
-		// let eventSkipArrB = eventSkipArr.map(a => a.B.toLocaleDateString());
-		// events = events.map(function (a) {
-		// 	a.dates.map(function (date, ind) {
-		// 		let foundInd = eventSkipArrB.indexOf(date.toLocaleDateString());
-		// 		if (foundInd >= 0) {
-		// 			a.dates[ind] = eventSkipArr[foundInd].E;
-		// 		}
-		// 	});
-		// 	return a;
-		// });
 
 		return events;
     };
@@ -1281,7 +1300,8 @@ let GLOBAL;
 	    	// determine lifting days to goal
 	    	let daysToGoal = 0;
     		movementObj.days.forEach(function (day) {
-    			daysToGoal += Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
+    			daysToGoal += day.future.filter(date => date < goal.date).length;
+    			// daysToGoal += Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
     		});
 
     		// make sentence concerning goal
@@ -1321,7 +1341,7 @@ let GLOBAL;
 	    };
 
     	return function (workoutObj) {
-			console.log(workoutObj);
+			// console.log(workoutObj);
 
 			const identifier = workoutObj.movement;
 			const divName = identifier.toLowerCase().replace(/\s/, "_");
@@ -1334,7 +1354,7 @@ let GLOBAL;
 		  	let $page = addComponents($div, identifier, divName);
 
 		  	// create figure
-		    buildFigure(movementObj.liftsByDate, divName);
+		    buildFigure(movementObj, divName);
 
 		    // build last lift table
 		    let $table = buildLiftInfoTable(movementObj.liftsByDate);
@@ -1436,7 +1456,9 @@ let GLOBAL;
 	    		//calculate days to goal
 	    		let daysToGoal = 0;
 	    		movementObj.days.forEach(function (day) {
-	    			daysToGoal += Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
+	    			// console.log('days to goal', day, day.future.filter(date => date < goal.date));
+	    			daysToGoal += day.future.filter(date => date < goal.date).length;
+	    			// Math.floor((goal.date * 1 - day.last * 1) / ONE_DAY / day.cycleLength);
 	    		});
 	    		row.push(daysToGoal);
 
@@ -1484,7 +1506,7 @@ let GLOBAL;
 	        //let last = movementObj.liftsByDate[0];
 
 	        // create figure
-	        buildFigure(movementObj.liftsByDate, divName);
+	        buildFigure(movementObj, divName);
 
 	        // build last lift table
 	        let $table = buildLiftInfoTable(movementObj.liftsByDate);
@@ -1557,16 +1579,47 @@ let GLOBAL;
 	    };
     }());
 
-    const buildFigure = function (summaryData, divName) {
+    const buildFigure = function (movementObj, divName) {
+
+    	let summaryData = movementObj.liftsByDate;
+    	let oneRM = 0;
+    	let cutoff = new Date((new Date()) * 1 + 32 * ONE_DAY);
+
+    	// console.log(movementObj.days);
+
+    	let futureDates = movementObj.days
+    		.map(day => day.future)
+
+    	if (futureDates.length) {
+    		futureDates = futureDates.reduce((a, b) => a.concat(b)).filter(d => d < cutoff);
+    	}
+
+    	// console.log(movementObj.movement, futureDates);
 
         let figData = [
-            ["Date", "1RM (Calc)", "Work", "Max Load"]
+            ["Date", "1RM (Calc)", "Work", "Max Load"] //, "1.5% growth", "3% growth", "4.5% growth"]
         ];
-        summaryData.forEach(a => figData.push([
-        	a.date,
-        	a.oneRM,
-        	a.work,
-			a.maxRep
+        summaryData.forEach(function (a) {
+			figData.push([
+	        	a.date,
+	        	a.oneRM,
+	        	a.work,
+				a.maxRep,
+				// NaN,
+				// NaN,
+				// NaN
+			]);
+			oneRM = Math.max(oneRM, a.oneRM)
+		});
+
+        futureDates.forEach((date, ind) => figData.push([
+        	date,
+        	NaN,
+        	NaN,
+        	NaN,
+        	// oneRM * Math.pow(1.015, ind + 1),
+        	// oneRM * Math.pow(1.03, ind + 1),
+        	// oneRM * Math.pow(1.045, ind + 1)
         ]));
 
         let buildIt = function () {
@@ -1593,6 +1646,9 @@ let GLOBAL;
                     2: {
                         targetAxisIndex: 0
                     },
+                    3: {
+                    	targetAxisIndex: 0
+                    }
                 },
                 vAxes: {
                     0: {
