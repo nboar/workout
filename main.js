@@ -3,7 +3,7 @@ let GLOBAL;
 
 	const posterKey = "JrnkdfKi0I.3UPdk6HCno";
 	const weightPosterKey = "7vMb8qY2vW.Pd48e4unuE";
-	const startDate = new Date("3/12/2021");
+	const startDate = new Date("3/12/2022");
 	const oneRMKey = "weight (1RM)";
 	const BAR_W = 45;
 	const PROJECT_TIME = 45; // days projected forward
