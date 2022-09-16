@@ -1605,8 +1605,19 @@ let GLOBAL;
         let figData = [
             ["Date", "1RM (Calc)", "Max Load"] //, "1.5% growth", "3% growth", "4.5% growth"]
         ];
+
+        let theseGoals = JSON.parse(JSON.stringify(movementObj.goals));
+        theseGoals.pop();
+
+        theseGoals.forEach(function () {
+        	figData[0].push("");
+        });
+
+        let minDate = summaryData[summaryData.length-1].date;
+        let maxDate = summaryData[0].date;
+
         summaryData.forEach(function (a) {
-			figData.push([
+        	let thisArr = [
 	        	a.date,
 	        	a.oneRM,
 	        	// a.work,
@@ -1614,19 +1625,45 @@ let GLOBAL;
 				// NaN,
 				// NaN,
 				// NaN
-			]);
+			];
+
+			theseGoals.forEach(function () {
+	        	thisArr.push(NaN);
+	        });
+
+	        figData.push(thisArr);
 			oneRM = Math.max(oneRM, a.oneRM)
 		});
 
-        futureDates.forEach((date, ind) => figData.push([
-        	date,
-        	NaN,
-        	// NaN,
-        	NaN,
-        	// oneRM * Math.pow(1.015, ind + 1),
-        	// oneRM * Math.pow(1.03, ind + 1),
-        	// oneRM * Math.pow(1.045, ind + 1)
-        ]));
+		theseGoals.forEach(function (a, ind) {
+			let one = [new Date(minDate * 1 - ONE_DAY * 5), NaN, NaN];
+			let two = [new Date(maxDate * 1 + ONE_DAY * 5), NaN, NaN];
+			for (let jj = 0; jj < ind; jj += 1) {
+				one.push(NaN);
+				two.push(NaN);
+			}
+			one.push(a[oneRMKey]);
+			two.push(a[oneRMKey]);
+
+			for (let jk = one.length - 3; jk < theseGoals.length; jk += 1) {
+				one.push(NaN);
+				two.push(NaN);
+			}
+			figData.push(one);
+			figData.push(two);
+		});
+
+		console.log(figData);
+
+        // futureDates.forEach((date, ind) => figData.push([
+        // 	date,
+        // 	NaN,
+        // 	// NaN,
+        // 	NaN,
+        // 	// oneRM * Math.pow(1.015, ind + 1),
+        // 	// oneRM * Math.pow(1.03, ind + 1),
+        // 	// oneRM * Math.pow(1.045, ind + 1)
+        // ]));
 
         let buildIt = function () {
             let visData = google.visualization.arrayToDataTable(figData);
@@ -1635,34 +1672,37 @@ let GLOBAL;
                 width: "100%",
                 height: 500,
                 pointSize: 8,
-                legend: {
-                    position: "top"
-                },
+                // legend: {
+                //     position: "top"
+                // },
+                legend: "none",
                 hAxis: {
+                	viewWindow: { min: minDate, max: maxDate}, viewWindowMode: "explicit" 
+                	// minValue: minDate
                     // title: "Date"
                 },
-                series: {
-                    // Gives each series an axis name
-                    0: {
-                        targetAxisIndex: 0
-                    },
-                    1: {
-                        targetAxisIndex: 1
-                    },
-                    2: {
-                        targetAxisIndex: 0
-                    },
-                    3: {
-                    	targetAxisIndex: 0
-                    }
-                },
+                // series: {
+                //     // Gives each series an axis name
+                //     0: {
+                //         targetAxisIndex: 0
+                //     },
+                //     1: {
+                //         targetAxisIndex: 0
+                //     },
+                //     2: {
+                //         targetAxisIndex: 0
+                //     },
+                //     3: {
+                //     	targetAxisIndex: 0
+                //     }
+                // },
                 vAxes: {
                     0: {
                         title: 'Calculated Weight 1RM (lbs)'
                     },
-                    1: {
-                        title: 'Work total (lbs)'
-                    }
+                    // 1: {
+                    //     title: 'Max Weight Attempted (lbs)'
+                    // }
                 }
             };
 
