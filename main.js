@@ -1587,6 +1587,8 @@ let GLOBAL;
 
     	// console.log(movementObj.days);
 
+    	console.log(movementObj);
+
     	let futureDates = movementObj.days
     		.map(day => day.future)
 
@@ -1596,14 +1598,18 @@ let GLOBAL;
 
     	// console.log(movementObj.movement, futureDates);
 
+        //let figData = [
+        //    ["Date", "1RM (Calc)", "Work", "Max Load"] //, "1.5% growth", "3% growth", "4.5% growth"]
+        //];
+
         let figData = [
-            ["Date", "1RM (Calc)", "Work", "Max Load"] //, "1.5% growth", "3% growth", "4.5% growth"]
+            ["Date", "1RM (Calc)", "Max Load"] //, "1.5% growth", "3% growth", "4.5% growth"]
         ];
         summaryData.forEach(function (a) {
 			figData.push([
 	        	a.date,
 	        	a.oneRM,
-	        	a.work,
+	        	// a.work,
 				a.maxRep,
 				// NaN,
 				// NaN,
@@ -1615,7 +1621,7 @@ let GLOBAL;
         futureDates.forEach((date, ind) => figData.push([
         	date,
         	NaN,
-        	NaN,
+        	// NaN,
         	NaN,
         	// oneRM * Math.pow(1.015, ind + 1),
         	// oneRM * Math.pow(1.03, ind + 1),
